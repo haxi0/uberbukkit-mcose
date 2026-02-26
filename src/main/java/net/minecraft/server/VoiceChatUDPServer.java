@@ -10,6 +10,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,22 @@ public class VoiceChatUDPServer {
     private static final long PROCESS_MAINTENANCE_INTERVAL_MS = 1000L;
     private static final int MAX_PACKET_QUEUE_SIZE = 1024;
 
+    private boolean debug = false;
+
+    public void setDebug(boolean debug) {
+        this.debug = debug;
+    }
+
+    private void logInfo(String msg) {
+        log.info("[Voice UDP] " + msg);
+    }
+
+    private void logDebug(String msg) {
+        if (this.debug) {
+            log.info("[Voice UDP/DEBUG] " + msg);
+        }
+    }
+
     private static final double WHISPER_DISTANCE_MULTIPLIER = 0.25D;
     private static final long MIC_ATTEMPT_LOG_INTERVAL_MS = 1000L;
     private static final long MIC_DROP_LOG_INTERVAL_MS = 1500L;
@@ -74,6 +91,8 @@ public class VoiceChatUDPServer {
 
     // Secret generation for authentication
     private final Map<UUID, UUID> playerSecrets = new ConcurrentHashMap<UUID, UUID>();
+    // Inverse map for quick lookup: secret UUID -> Player UUID
+    private final Map<UUID, UUID> secrets = new ConcurrentHashMap<UUID, UUID>();
 
     public VoiceChatUDPServer(MinecraftServer server, int port) {
         this.server = server;
@@ -86,6 +105,7 @@ public class VoiceChatUDPServer {
     public UUID generateSecret(UUID playerId) {
         UUID secret = UUID.randomUUID();
         playerSecrets.put(playerId, secret);
+        secrets.put(secret, playerId); // Store inverse mapping
         return secret;
     }
 
@@ -155,6 +175,7 @@ public class VoiceChatUDPServer {
         uncheckedClients.clear();
         addressToClient.clear();
         playerSecrets.clear();
+        secrets.clear(); // Clear inverse map
     }
 
     private void receiveLoop() {
@@ -163,6 +184,7 @@ public class VoiceChatUDPServer {
 
         while (running) {
             try {
+                packet.setLength(buffer.length);
                 socket.receive(packet);
 
                 byte[] data = new byte[packet.getLength()];
@@ -198,7 +220,7 @@ public class VoiceChatUDPServer {
                 long now = System.currentTimeMillis();
 
                 if (packet != null) {
-                    handlePacket(packet.data, packet.address, packet.port, packet.receivedAt);
+                    handlePacket(packet); // Pass the full ReceivedDatagram
                 }
 
                 if (now - lastMaintenanceAt >= PROCESS_MAINTENANCE_INTERVAL_MS) {
@@ -220,118 +242,154 @@ public class VoiceChatUDPServer {
         }
     }
 
-    private void handlePacket(byte[] data, InetAddress address, int port, long receivedAt) {
-        if (data == null || data.length < 1) {
+    private void handlePacket(ReceivedDatagram datagram) { // Changed parameter to ReceivedDatagram
+        if (datagram.data == null || datagram.data.length < 1) {
             return;
         }
 
-        switch (data[0]) {
+        switch (datagram.data[0]) {
             case PACKET_AUTH:
-                handleAuth(data, address, port, receivedAt);
+                handleAuth(datagram); // Pass the full ReceivedDatagram
                 break;
             case PACKET_MIC:
-                handleMicPacket(data, address, port, receivedAt);
+                handleMicPacket(datagram); // Pass the full ReceivedDatagram
                 break;
             case PACKET_KEEP_ALIVE:
-                handleKeepAlive(data, address, port);
+                handleKeepAlive(datagram.data, datagram.address, datagram.port);
                 break;
             case PACKET_STATE:
-                handleStateUpdate(data, address, port);
+                handleStateUpdate(datagram.data, datagram.address, datagram.port);
                 break;
             case PACKET_CONNECTION_CHECK:
-                handleConnectionCheck(data, address, port);
+                handleConnectionCheck(datagram.data, datagram.address, datagram.port);
                 break;
             default:
                 break;
         }
     }
 
-    private void handleAuth(byte[] data, InetAddress address, int port, long receivedAt) {
-        if (data.length < 33) {
+    private void handleAuth(ReceivedDatagram datagram) {
+        ByteBuffer buffer = ByteBuffer.wrap(datagram.data, 1, datagram.data.length - 1);
+        if (buffer.remaining() < 32) { // 2 UUIDs = 32 bytes
+            logDebug("Auth failed for " + datagram.address + ":" + datagram.port + ": packet too short (" + buffer.remaining() + " bytes)");
+            sendAuthAck(datagram.address, datagram.port, false, "Malformed auth packet");
             return;
         }
 
-        try {
-            DataInputStream in = new DataInputStream(new ByteArrayInputStream(data, 1, data.length - 1));
-            UUID playerId = readUUID(in);
-            UUID secret = readUUID(in);
+        long msbPlayer = buffer.getLong();
+        long lsbPlayer = buffer.getLong();
+        UUID playerId = new UUID(msbPlayer, lsbPlayer);
 
-            UUID expectedSecret = playerSecrets.get(playerId);
-            if (expectedSecret == null || !expectedSecret.equals(secret)) {
-                sendAuthAck(address, port, false, "Invalid secret");
-                return;
-            }
+        long msbSecret = buffer.getLong();
+        long lsbSecret = buffer.getLong();
+        UUID secret = new UUID(msbSecret, lsbSecret);
 
-            EntityPlayer player = findPlayerByUUID(playerId);
-            if (player == null) {
-                sendAuthAck(address, port, false, "Player not found");
-                return;
-            }
+        logDebug("Received auth request from " + datagram.address + ":" + datagram.port + " for player " + playerId);
 
-            VoiceClient existingConnected = playerToClient.get(playerId);
-            if (existingConnected != null) {
-                removeClient(existingConnected, false);
-            }
-            VoiceClient existingUnchecked = uncheckedClients.get(playerId);
-            if (existingUnchecked != null) {
-                removeClient(existingUnchecked, false);
-            }
-
-            VoiceClient sameAddress = findAnyClientByAddress(address, port);
-            if (sameAddress != null && !playerId.equals(sameAddress.playerId)) {
-                removeClient(sameAddress, false);
-            }
-
-            VoiceClient candidate = new VoiceClient(playerId, player.name, address, port, secret);
-            candidate.lastActivity = receivedAt;
-            uncheckedClients.put(playerId, candidate);
-            addressToClient.put(addressKey(address, port), candidate);
-
-            log.info("[VoiceChat] Player " + player.name + " authenticated for voice chat from " + address + ", waiting for connection check");
-            sendAuthAck(address, port, true, "OK");
-        } catch (IOException e) {
-            sendAuthAck(address, port, false, "Malformed auth packet");
+        UUID expectedSecret = playerSecrets.get(playerId);
+        if (expectedSecret == null || !expectedSecret.equals(secret)) {
+            logInfo("Auth failed for " + datagram.address + ":" + datagram.port + ": invalid secret for player " + playerId);
+            sendAuthAck(datagram.address, datagram.port, false, "Invalid secret");
+            return;
         }
+
+        EntityPlayer player = findPlayerByUUID(playerId);
+        if (player == null) {
+            logInfo("Auth failed for " + datagram.address + ":" + datagram.port + ": player " + playerId + " not found");
+            sendAuthAck(datagram.address, datagram.port, false, "Player not found");
+            return;
+        }
+
+        // Check for existing clients for this player
+        VoiceClient existingConnected = playerToClient.get(playerId);
+        if (existingConnected != null) {
+            if (!existingConnected.address.equals(datagram.address) || existingConnected.port != datagram.port) {
+                logInfo("Player " + player.name + " re-authenticating from new address/port: " + existingConnected.address + ":" + existingConnected.port + " -> " + datagram.address + ":" + datagram.port);
+                removeClient(existingConnected, false);
+            } else {
+                // Same player, same address/port, just update activity and re-ack
+                existingConnected.lastActivity = datagram.receivedAt;
+                logDebug("Player " + player.name + " re-authenticated from " + datagram.address + ":" + datagram.port + " (already connected)");
+                sendAuthAck(datagram.address, datagram.port, true, "OK");
+                return;
+            }
+        }
+
+        VoiceClient existingUnchecked = uncheckedClients.get(playerId);
+        if (existingUnchecked != null) {
+            if (!existingUnchecked.address.equals(datagram.address) || existingUnchecked.port != datagram.port) {
+                logInfo("Player " + player.name + " re-authenticating from new address/port: " + existingUnchecked.address + ":" + existingUnchecked.port + " -> " + datagram.address + ":" + datagram.port);
+                removeClient(existingUnchecked, false);
+            } else {
+                // Same player, same address/port, just update activity and re-ack
+                existingUnchecked.lastActivity = datagram.receivedAt;
+                logDebug("Player " + player.name + " re-authenticated from " + datagram.address + ":" + datagram.port + " (already unchecked)");
+                sendAuthAck(datagram.address, datagram.port, true, "OK");
+                return;
+            }
+        }
+
+        // Check for any client using this address/port, if it's a different player, remove it
+        VoiceClient sameAddress = findAnyClientByAddress(datagram.address, datagram.port);
+        if (sameAddress != null && !playerId.equals(sameAddress.playerId)) {
+            logInfo("Address " + datagram.address + ":" + datagram.port + " previously used by " + sameAddress.playerName + ", now claimed by " + player.name + ". Removing old client.");
+            removeClient(sameAddress, false);
+        }
+
+        VoiceClient candidate = new VoiceClient(playerId, player.name, datagram.address, datagram.port, secret);
+        candidate.lastActivity = datagram.receivedAt;
+        uncheckedClients.put(playerId, candidate);
+        addressToClient.put(addressKey(datagram.address, datagram.port), candidate);
+
+        logInfo("[VoiceChat] Player " + player.name + " authenticated for voice chat from " + datagram.address + ":" + datagram.port + ", waiting for connection check");
+        sendAuthAck(datagram.address, datagram.port, true, "OK");
     }
 
-    private void handleMicPacket(byte[] data, InetAddress address, int port, long receivedAt) {
+    private void handleMicPacket(ReceivedDatagram datagram) {
         long now = System.currentTimeMillis();
 
-        VoiceClient sender = findConnectedClientByAddress(address, port);
+        VoiceClient sender = findConnectedClientByAddress(datagram.address, datagram.port);
         if (sender == null) {
-            VoiceClient pending = findAnyClientByAddress(address, port);
+            VoiceClient pending = findAnyClientByAddress(datagram.address, datagram.port);
             if (pending != null && !pending.validated) {
                 pending.lastActivity = now;
                 logMicDrop(pending, "not-validated", now);
                 return;
             }
-            logUnknownMicDrop(address, port, "unknown-client", now);
+            logUnknownMicDrop(datagram.address, datagram.port, "unknown-client", now);
             return;
         }
 
-        if (now - receivedAt > MIC_PACKET_TTL_MS) {
-            logMicDrop(sender, "stale-ttl queueDelayMs=" + (now - receivedAt), now);
+        if (now - datagram.receivedAt > MIC_PACKET_TTL_MS) {
+            logMicDrop(sender, "stale-ttl queueDelayMs=" + (now - datagram.receivedAt), now);
             return;
         }
 
         sender.lastActivity = now;
 
         try {
-            DataInputStream in = new DataInputStream(new ByteArrayInputStream(data, 1, data.length - 1));
-            long sequence = in.readLong();
-            boolean whispering = in.readBoolean();
-            int payloadLength = in.readUnsignedShort();
+            ByteBuffer buffer = ByteBuffer.wrap(datagram.data, 1, datagram.data.length - 1);
+            if (buffer.remaining() < 8 + 1 + 2) { // sequence (8), whispering (1), payloadLength (2)
+                logMicDrop(sender, "malformed-mic-packet: header too short", now);
+                return;
+            }
+
+            long sequence = buffer.getLong();
+            boolean whispering = buffer.get() != 0;
+            int payloadLength = Short.toUnsignedInt(buffer.getShort());
+
             if (payloadLength > Packet64Voice.MAX_PAYLOAD_SIZE) {
                 logMicDrop(sender, "payload-too-large:" + payloadLength, now);
                 return;
             }
-            if (payloadLength > in.available()) {
-                logMicDrop(sender, "truncated-payload expected=" + payloadLength + " available=" + in.available(), now);
+            if (payloadLength > buffer.remaining()) {
+                logMicDrop(sender, "truncated-payload expected=" + payloadLength + " available=" + buffer.remaining(), now);
                 return;
             }
+
             byte[] audioData = new byte[payloadLength];
             if (payloadLength > 0) {
-                in.readFully(audioData);
+                buffer.get(audioData);
             }
 
             if (sender.lastSequence >= 0L && sequence <= sender.lastSequence) {
@@ -358,7 +416,7 @@ public class VoiceChatUDPServer {
                 recipients = broadcastByProximity(senderPlayer, sequence, audioData, whispering);
             }
             logMicAttempt(sender, sequence, payloadLength, whispering, routeRoom ? "room" : "proximity", recipients, now);
-        } catch (IOException e) {
+        } catch (Exception e) { // Catch generic Exception for ByteBuffer operations
             logMicDrop(sender, "malformed-mic-packet:" + e.getMessage(), now);
         }
     }
@@ -448,6 +506,7 @@ public class VoiceChatUDPServer {
             return;
         }
         client.lastActivity = System.currentTimeMillis();
+        logDebug("Keep-alive from " + client.playerName);
     }
 
     private void handleStateUpdate(byte[] data, InetAddress address, int port) {
@@ -460,12 +519,14 @@ public class VoiceChatUDPServer {
             DataInputStream in = new DataInputStream(new ByteArrayInputStream(data, 1, data.length - 1));
             UUID packetPlayerId = readUUID(in);
             if (!client.playerId.equals(packetPlayerId)) {
+                logDebug("State update failed for " + client.playerName + ": UUID mismatch");
                 return;
             }
             client.talking = in.readBoolean();
             client.muted = in.readBoolean();
             client.deafened = in.readBoolean();
             client.lastActivity = System.currentTimeMillis();
+            logDebug("State update for " + client.playerName + ": talking=" + client.talking + ", muted=" + client.muted + ", deafened=" + client.deafened);
         } catch (IOException ignored) {
         }
     }
@@ -482,11 +543,13 @@ public class VoiceChatUDPServer {
             }
 
             client.lastActivity = System.currentTimeMillis();
+            logDebug("Received connection check from " + client.playerName + " (resp=" + response + ")");
             if (!response) {
                 if (!client.validated) {
                     promoteValidatedClient(client);
                 }
                 sendConnectionCheck(address, port, id, true);
+                logDebug("Sent connection check response to " + client.playerName);
             }
         } catch (IOException ignored) {
         }
@@ -655,29 +718,22 @@ public class VoiceChatUDPServer {
     }
 
     private void cleanupStaleClients(long now) {
-        Iterator<Map.Entry<UUID, VoiceClient>> connectedIterator = playerToClient.entrySet().iterator();
-        while (connectedIterator.hasNext()) {
-            Map.Entry<UUID, VoiceClient> entry = connectedIterator.next();
-            VoiceClient client = entry.getValue();
-            if (client == null) {
-                connectedIterator.remove();
-                continue;
-            }
+        // Cleanup validated clients
+        Iterator<VoiceClient> it = playerToClient.values().iterator();
+        while (it.hasNext()) {
+            VoiceClient client = it.next();
             if (now - client.lastActivity > CLIENT_TIMEOUT_MS) {
+                logInfo("Voice client timed out: " + client.playerName + " (" + client.address + ")");
                 removeClient(client, false);
-                log.info("[VoiceChat] Player " + client.playerName + " timed out from voice chat");
             }
         }
 
-        Iterator<Map.Entry<UUID, VoiceClient>> uncheckedIterator = uncheckedClients.entrySet().iterator();
-        while (uncheckedIterator.hasNext()) {
-            Map.Entry<UUID, VoiceClient> entry = uncheckedIterator.next();
-            VoiceClient client = entry.getValue();
-            if (client == null) {
-                uncheckedIterator.remove();
-                continue;
-            }
+        // Cleanup unvalidated clients
+        it = uncheckedClients.values().iterator();
+        while (it.hasNext()) {
+            VoiceClient client = it.next();
             if (now - client.lastActivity > UNCHECKED_CLIENT_TIMEOUT_MS) {
+                logDebug("Unchecked voice client timed out: " + client.playerName + " (" + client.address + ")");
                 removeClient(client, false);
             }
         }
@@ -694,7 +750,10 @@ public class VoiceChatUDPServer {
             clients.remove(client.secret, client);
         }
         if (removeSecret) {
-            playerSecrets.remove(client.playerId);
+            UUID secret = playerSecrets.remove(client.playerId);
+            if (secret != null) {
+                secrets.remove(secret);
+            }
         }
     }
 

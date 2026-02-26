@@ -70,8 +70,10 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public boolean spawnAnimals;
     public boolean pvpMode;
     public boolean allowFlight;
-    public boolean voiceChatEnabled;
-    public int voiceChatPort;
+    private boolean voiceChatEnabled = true;
+    private int voiceChatPort = 24454;
+    private boolean voiceChatDebug = false;
+    private String voiceChatTransport = "tcp"; // tcp, udp, or both
     public final VoiceChatRoomManager chatRoomManager;
     private static final double DEFAULT_VOICE_CHAT_RADIUS = 48.0D;
     private static final int DEFAULT_VOICE_CHAT_PORT = 24454;
@@ -180,8 +182,22 @@ public class MinecraftServer implements Runnable, ICommandListener {
         this.allowFlight = this.propertyManager.getBoolean("allow-flight", false);
         this.voiceChatEnabled = this.propertyManager.getBoolean("voice-chat", true);
         this.voiceChatPort = this.propertyManager.getInt("voice-chat-port", DEFAULT_VOICE_CHAT_PORT);
+        this.voiceChatDebug = this.propertyManager.getBoolean("voice-chat-debug", false);
+        this.voiceChatBroadcastRadius = this.propertyManager.getDouble("voice-chat-broadcast-radius", DEFAULT_VOICE_CHAT_RADIUS);
+        String transportRaw = this.propertyManager.getString("voice-chat-transport", "tcp").trim().toLowerCase();
+        if (transportRaw.equals("udp") || transportRaw.equals("both")) {
+            this.voiceChatTransport = transportRaw;
+        } else {
+            this.voiceChatTransport = "tcp";
+        }
         if (this.voiceChatEnabled) {
-            log.info("Voice chat broadcasting enabled (UDP port: " + this.voiceChatPort + ")");
+            if (this.voiceChatTransport.equals("tcp")) {
+                log.info("Voice chat transport: TCP (primary) — UDP server will not start");
+            } else if (this.voiceChatTransport.equals("both")) {
+                log.info("Voice chat transport: TCP+UDP (TCP primary, UDP port: " + this.voiceChatPort + ")");
+            } else {
+                log.info("Voice chat transport: UDP (primary, port: " + this.voiceChatPort + ")");
+            }
         }
         this.configuredLevelType = this.propertyManager.getString("level-type", "DEFAULT").toUpperCase(); // Added
         
@@ -1196,16 +1212,32 @@ public class MinecraftServer implements Runnable, ICommandListener {
         return this.voiceChatPort;
     }
     
+    public String getVoiceChatTransport() {
+        return this.voiceChatTransport;
+    }
+    
+    /**
+     * Whether the UDP voice server should be available (transport is "udp" or "both").
+     */
+    public boolean isVoiceChatUDPEnabled() {
+        return this.voiceChatEnabled && ("udp".equals(this.voiceChatTransport) || "both".equals(this.voiceChatTransport));
+    }
+    
     public VoiceChatUDPServer getVoiceChatUDPServer() {
         return this.voiceChatUDPServer;
     }
     
     public void startVoiceChatServer() {
-        if (this.voiceChatEnabled && this.voiceChatUDPServer == null) {
+        if (!this.voiceChatEnabled) {
+            return;
+        }
+        // Only start UDP server if transport mode includes UDP
+        if (this.isVoiceChatUDPEnabled() && this.voiceChatUDPServer == null) {
             try {
                 this.voiceChatUDPServer = new VoiceChatUDPServer(this, this.voiceChatPort);
+                this.voiceChatUDPServer.setDebug(this.voiceChatDebug);
                 this.voiceChatUDPServer.start();
-                log.info("Voice chat UDP server started on port " + this.voiceChatPort);
+                log.info("Voice chat UDP server started on port " + this.voiceChatPort + (this.voiceChatDebug ? " (debug enabled)" : ""));
             } catch (Exception e) {
                 log.warning("Failed to start voice chat UDP server: " + e.getMessage());
             }

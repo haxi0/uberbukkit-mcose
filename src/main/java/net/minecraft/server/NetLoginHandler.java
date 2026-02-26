@@ -322,25 +322,33 @@ public class NetLoginHandler extends NetHandler {
                     }
                 } catch (Throwable ignore) {}
                 if (this.server.isVoiceChatEnabled()) {
-                    VoiceChatUDPServer voiceServer = this.server.getVoiceChatUDPServer();
-                    if (voiceServer != null && entityplayer.getMojangUUID() != null) {
-                        java.util.UUID secret = voiceServer.generateSecret(entityplayer.getMojangUUID());
-                        if (secret != null) {
-                            netserverhandler.sendPacket(new Packet70Bed(11));
-                            // Send voice server connection info as a special packet
-                            // Format: [[VOICEINFO:port:secretMSB:secretLSB]]
-                            String voiceInfo = "[[VOICEINFO:" + this.server.getVoiceChatPort() + ":" +
-                                              secret.getMostSignificantBits() + ":" +
-                                              secret.getLeastSignificantBits() + "]]";
-                            netserverhandler.sendPacket(new Packet3Chat(voiceInfo));
-                        } else {
-                            netserverhandler.sendPacket(new Packet70Bed(12));
+                    // Always tell the client voice chat is enabled so it captures audio
+                    netserverhandler.sendPacket(new Packet70Bed(11));
+                    
+                    boolean sentRealUdpInfo = false;
+                    // Provide UDP info if transport mode includes UDP
+                    if (this.server.isVoiceChatUDPEnabled()) {
+                        VoiceChatUDPServer voiceServer = this.server.getVoiceChatUDPServer();
+                        if (voiceServer != null && entityplayer.getMojangUUID() != null) {
+                            java.util.UUID secret = voiceServer.generateSecret(entityplayer.getMojangUUID());
+                            if (secret != null) {
+                                String voiceInfo = "[[VOICEINFO:" + this.server.getVoiceChatPort() + ":" +
+                                                  secret.getMostSignificantBits() + ":" +
+                                                  secret.getLeastSignificantBits() + "]]";
+                                netserverhandler.sendPacket(new Packet3Chat(voiceInfo));
+                                sentRealUdpInfo = true;
+                            }
                         }
-                    } else {
-                        netserverhandler.sendPacket(new Packet70Bed(12));
+                    }
+                    
+                    if (!sentRealUdpInfo) {
+                        // Send dummy UDP info to trigger immediate TCP fallback on client
+                        // We use the real port but a dummy secret so we don't cause 'sendto' socket errors
+                        String dummyInfo = "[[VOICEINFO:" + this.server.getVoiceChatPort() + ":0:0]]";
+                        netserverhandler.sendPacket(new Packet3Chat(dummyInfo));
                     }
                 } else {
-                    netserverhandler.sendPacket(new Packet70Bed(12));
+                    netserverhandler.sendPacket(new Packet70Bed(12)); // Voice chat disabled
                 }
                 this.server.chatRoomManager.sendSnapshot(entityplayer);
                 

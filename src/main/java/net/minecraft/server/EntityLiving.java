@@ -73,6 +73,7 @@ public abstract class EntityLiving extends Entity {
     protected float aE = 0.7F;
     private Entity b;
     protected int aF = 0;
+    protected boolean persistenceRequired = false;
 
     public EntityLiving(World world) {
         super(world);
@@ -676,6 +677,7 @@ public abstract class EntityLiving extends Entity {
         nbttagcompound.a("DeathTime", (short) this.deathTicks);
         nbttagcompound.a("AttackTime", (short) this.attackTicks);
         nbttagcompound.a("EntityAge", this.ay);
+        nbttagcompound.a("PersistenceRequired", this.persistenceRequired);
     }
 
     public void a(NBTTagCompound nbttagcompound) {
@@ -690,6 +692,7 @@ public abstract class EntityLiving extends Entity {
         if (nbttagcompound.hasKey("EntityAge")) {
             this.ay = nbttagcompound.e("EntityAge");
         }
+        this.persistenceRequired = nbttagcompound.m("PersistenceRequired");
     }
 
     public boolean T() {
@@ -794,7 +797,7 @@ public abstract class EntityLiving extends Entity {
     protected void U() {
         EntityHuman entityhuman = this.world.findNearbyPlayer(this, -1.0D);
 
-        if (this.h_() && entityhuman != null) {
+        if (this.h_() && !this.persistenceRequired && entityhuman != null) {
             double d0 = entityhuman.locX - this.locX;
             double d1 = entityhuman.locY - this.locY;
             double d2 = entityhuman.locZ - this.locZ;

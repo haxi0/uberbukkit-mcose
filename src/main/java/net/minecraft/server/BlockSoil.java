@@ -51,23 +51,6 @@ public class BlockSoil extends Block {
     }
 
     public void b(World world, int i, int j, int k, Entity entity) {
-        if (world.random.nextInt(4) == 0) {
-            // CraftBukkit start - Interact Soil
-            org.bukkit.event.Cancellable cancellable;
-            if (entity instanceof EntityHuman) {
-                cancellable = CraftEventFactory.callPlayerInteractEvent((EntityHuman) entity, org.bukkit.event.block.Action.PHYSICAL, i, j, k, -1, null);
-            } else {
-                cancellable = new EntityInteractEvent(entity.getBukkitEntity(), world.getWorld().getBlockAt(i, j, k));
-                world.getServer().getPluginManager().callEvent((EntityInteractEvent) cancellable);
-            }
-
-            if (cancellable.isCancelled()) {
-                return;
-            }
-            // CraftBukkit end
-
-            world.setTypeId(i, j, k, Block.DIRT.id);
-        }
     }
 
     private boolean g(World world, int i, int j, int k) {

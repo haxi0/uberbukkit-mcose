@@ -28,7 +28,7 @@ public class BlockCrops extends BlockFlower {
             if (l < 7) {
                 float f = this.h(world, i, j, k);
 
-                if (random.nextInt((int) (100.0F / f)) == 0) {
+                if (random.nextInt((int) (25.0F / f) + 1) == 0) {
                     ++l;
                     world.setData(i, j, k, l);
                 }

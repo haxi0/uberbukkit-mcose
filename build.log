@@ -1,0 +1,28 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ----------------------< uk.betacraft:uberbukkit >-----------------------
+[INFO] Building UberBukkit 1.1.8
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.2.0:clean (default-clean) @ uberbukkit ---
+[INFO] Deleting /media/WD/Developer/uberbukkit-mcose/target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ uberbukkit ---
+[INFO] Copying 5 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.8.1:compile (default-compile) @ uberbukkit ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 1200 source files to /media/WD/Developer/uberbukkit-mcose/target/classes
+[WARNING] /media/WD/Developer/uberbukkit-mcose/src/main/java/net/minecraft/server/NetworkMasterThread.java:[16,45] stop() in java.lang.Thread has been deprecated and marked for removal
+[WARNING] /media/WD/Developer/uberbukkit-mcose/src/main/java/net/minecraft/server/NetworkMasterThread.java:[24,45] stop() in java.lang.Thread has been deprecated and marked for removal
+[INFO] /media/WD/Developer/uberbukkit-mcose/src/main/java/net/minecraft/server/DeathMessageHelper.java: Some input files use or override a deprecated API.
+[INFO] /media/WD/Developer/uberbukkit-mcose/src/main/java/net/minecraft/server/DeathMessageHelper.java: Recompile with -Xlint:deprecation for details.
+[INFO] /media/WD/Developer/uberbukkit-mcose/src/main/java/net/minecraft/server/Packet.java: Some input files use unchecked or unsafe operations.
+[INFO] /media/WD/Developer/uberbukkit-mcose/src/main/java/net/minecraft/server/Packet.java: Recompile with -Xlint:unchecked for details.
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  4.972 s
+[INFO] Finished at: 2026-02-25T00:58:47+03:00
+[INFO] ------------------------------------------------------------------------

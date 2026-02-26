@@ -85,6 +85,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private static final long VOICE_TCP_DROP_LOG_INTERVAL_MS = 1500L;
     private long lastVoiceTcpAttemptLogAt = 0L;
     private long lastVoiceTcpDropLogAt = 0L;
+    private boolean firstTcpVoiceLogged = false;
     
     // MCOSE version checking
     private boolean receivedVersionPacket = false;
@@ -691,6 +692,12 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (!this.minecraftServer.isVoiceChatEnabled()) {
             logVoiceTcpDrop(now, payloadLength, "voice-chat-disabled");
             return;
+        }
+
+        if (!this.firstTcpVoiceLogged) {
+            this.firstTcpVoiceLogged = true;
+            String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
+            a.info("[VoiceChat] Player " + playerName + " using TCP voice transport");
         }
 
         if (packet64voice == null || packet64voice.audioData == null) {

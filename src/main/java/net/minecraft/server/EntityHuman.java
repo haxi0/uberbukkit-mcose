@@ -1084,6 +1084,31 @@ public abstract class EntityHuman extends EntityLiving {
             this.a(StatisticList.n, (int) Math.round((double) f * 100.0D));
         }
 
+        if (f > 0.5F && !this.world.isStatic) {
+            int i = MathHelper.floor(this.locX);
+            int j = MathHelper.floor(this.locY - 0.20000000298023224D - (double) this.height);
+            int k = MathHelper.floor(this.locZ);
+
+            if (this.world.getTypeId(i, j, k) == Block.SOIL.id || this.world.getTypeId(i, j, k) == Block.CROPS.id) {
+                if (this.world.getTypeId(i, j, k) == Block.CROPS.id) {
+                    --j;
+                    if (this.world.getTypeId(i, j, k) != Block.SOIL.id) {
+                        ++j;
+                    }
+                }
+
+                if (this.world.getTypeId(i, j, k) == Block.SOIL.id) {
+                    // CraftBukkit start - Interact Soil
+                    org.bukkit.event.Cancellable cancellable = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(this, org.bukkit.event.block.Action.PHYSICAL, i, j, k, -1, null);
+
+                    if (!cancellable.isCancelled()) {
+                        this.world.setTypeId(i, j, k, Block.DIRT.id);
+                    }
+                    // CraftBukkit end
+                }
+            }
+        }
+
         super.a(f);
     }
 

@@ -90,6 +90,16 @@ public class PropertyManager {
         }
     }
 
+    public double getDouble(String s, double d) {
+        try {
+            return this.getOverride(s, Double.parseDouble(this.getString(s, "" + d))); // CraftBukkit
+        } catch (Exception exception) {
+            d = this.getOverride(s, d); // CraftBukkit
+            this.properties.setProperty(s, "" + d);
+            return d;
+        }
+    }
+
     public void b(String s, boolean flag) {
         flag = this.getOverride(s, flag); // CraftBukkit
         this.properties.setProperty(s, "" + flag);

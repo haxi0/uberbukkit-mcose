@@ -4,10 +4,15 @@ public abstract class EntityAnimal extends EntityCreature implements IAnimal {
 
     public EntityAnimal(World world) {
         super(world);
+        this.persistenceRequired = true;
     }
 
     protected float a(int i, int j, int k) {
         return this.world.getTypeId(i, j - 1, k) == Block.GRASS.id ? 10.0F : this.world.n(i, j, k) - 0.5F;
+    }
+
+    protected boolean h_() {
+        return false;
     }
 
     public void b(NBTTagCompound nbttagcompound) {
