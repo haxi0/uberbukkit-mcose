@@ -10,7 +10,7 @@ import net.minecraft.server.MinecraftServer;
 public class GameruleCommand extends VanillaCommand {
     
     // Boolean gamerules
-    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory"};
+    private static final String[] BOOLEAN_RULES = {"doDayNightCycle", "tntexplodes", "mobGriefing", "doWeatherCycle", "doFireTick", "showDeathMessages", "sleepEnabled", "advertiseAchievements", "keepInventory"};
     // Integer gamerules
     private static final String[] INTEGER_RULES = {"spawnRadius", "spawnProtectionRadius"};
     
@@ -80,6 +80,8 @@ public class GameruleCommand extends VanillaCommand {
                 sender.sendMessage(args[0] + " = " + worldData.getMobGriefing());
             } else if (ruleName.equals("doweathercycle")) {
                 sender.sendMessage(args[0] + " = " + worldData.getDoWeatherCycle());
+            } else if (ruleName.equals("dofiretick")) {
+                sender.sendMessage(args[0] + " = " + worldData.getDoFireTick());
             } else if (ruleName.equals("showdeathmessages")) {
                 sender.sendMessage(args[0] + " = " + worldData.getShowDeathMessages());
             } else if (ruleName.equals("sleepenabled")) {
@@ -139,6 +141,8 @@ public class GameruleCommand extends VanillaCommand {
                     worldData.setMobGriefing(value);
                 } else if (ruleName.equals("doweathercycle")) {
                     worldData.setDoWeatherCycle(value);
+                } else if (ruleName.equals("dofiretick")) {
+                    worldData.setDoFireTick(value);
                 } else if (ruleName.equals("showdeathmessages")) {
                     worldData.setShowDeathMessages(value);
                 } else if (ruleName.equals("sleepenabled")) {

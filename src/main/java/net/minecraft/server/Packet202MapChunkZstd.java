@@ -3,10 +3,8 @@ package net.minecraft.server;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.zip.DataFormatException;
-import java.util.zip.Inflater;
 
-public class Packet51MapChunk extends Packet {
+public class Packet202MapChunkZstd extends Packet {
 
     public int a;
     public int b;
@@ -15,20 +13,18 @@ public class Packet51MapChunk extends Packet {
     public int e;
     public int f;
     public byte[] g;
-    public int h; // CraftBukkit - private -> public
-    public byte[] rawData; // CraftBukkit
+    public int h;
+    public byte[] rawData;
 
-    public Packet51MapChunk() {
+    public Packet202MapChunkZstd() {
         this.k = true;
     }
 
-    // CraftBukkit start
-    public Packet51MapChunk(int i, int j, int k, int l, int i1, int j1, World world) {
+    public Packet202MapChunkZstd(int i, int j, int k, int l, int i1, int j1, World world) {
         this(i, j, k, l, i1, j1, world.getMultiChunkData(i, j, k, l, i1, j1));
     }
 
-    public Packet51MapChunk(int i, int j, int k, int l, int i1, int j1, byte[] data) {
-        // CraftBukkit end
+    public Packet202MapChunkZstd(int i, int j, int k, int l, int i1, int j1, byte[] data) {
         this.k = true;
         this.a = i;
         this.b = j;
@@ -36,22 +32,10 @@ public class Packet51MapChunk extends Packet {
         this.d = l;
         this.e = i1;
         this.f = j1;
-        /* CraftBukkit - Moved compression into its own method.
-        byte[] abyte = data; // CraftBukkit - uses data from above constructor
-        Deflater deflater = new Deflater(-1);
-
-        try {
-            deflater.setInput(abyte);
-            deflater.finish();
-            this.g = new byte[l * i1 * j1 * 5 / 2];
-            this.h = deflater.deflate(this.g);
-        } finally {
-            deflater.end();
-        }*/
-        this.rawData = data; // CraftBukkit
+        this.rawData = data;
     }
 
-    public void a(DataInputStream datainputstream) throws IOException { // CraftBukkit - throws IOEXception
+    public void a(DataInputStream datainputstream) throws IOException {
         this.a = datainputstream.readInt();
         this.b = datainputstream.readShort();
         this.c = datainputstream.readInt();
@@ -59,24 +43,17 @@ public class Packet51MapChunk extends Packet {
         this.e = datainputstream.read() + 1;
         this.f = datainputstream.read() + 1;
         this.h = datainputstream.readInt();
-        byte[] abyte = new byte[this.h];
+        byte[] compressed = new byte[this.h];
+        datainputstream.readFully(compressed);
 
-        datainputstream.readFully(abyte);
-        this.g = new byte[this.d * this.e * this.f * 5 / 2];
-        Inflater inflater = new Inflater();
-
-        inflater.setInput(abyte);
-
-        try {
-            inflater.inflate(this.g);
-        } catch (DataFormatException dataformatexception) {
-            throw new IOException("Bad compressed data format");
-        } finally {
-            inflater.end();
+        int expectedSize = this.d * this.e * this.f * 5 / 2;
+        this.g = ZstdRuntime.decompressZstd(compressed, expectedSize);
+        if (this.g == null) {
+            throw new IOException("Bad zstd chunk data format");
         }
     }
 
-    public void a(DataOutputStream dataoutputstream) throws IOException { // CraftBukkit - throws IOException
+    public void a(DataOutputStream dataoutputstream) throws IOException {
         dataoutputstream.writeInt(this.a);
         dataoutputstream.writeShort(this.b);
         dataoutputstream.writeInt(this.c);
@@ -96,7 +73,7 @@ public class Packet51MapChunk extends Packet {
     }
 
     public Packet clone() {
-        Packet51MapChunk clone = new Packet51MapChunk();
+        Packet202MapChunkZstd clone = new Packet202MapChunkZstd();
         clone.a = this.a;
         clone.b = this.b;
         clone.c = this.c;

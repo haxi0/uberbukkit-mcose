@@ -7,6 +7,7 @@ import com.projectposeidon.ConnectionType;
 import com.legacyminecraft.poseidon.PoseidonConfig;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -85,8 +86,16 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private int voiceTcpBytesInWindow = 0;
     private static final long VOICE_TCP_ATTEMPT_LOG_INTERVAL_MS = 1000L;
     private static final long VOICE_TCP_DROP_LOG_INTERVAL_MS = 1500L;
+    private static final long VOICE_TCP_QUEUE_DROP_LOG_INTERVAL_MS = 1500L;
+    private static final int VOICE_TCP_INBOUND_QUEUE_MAX_PACKETS = 240;
     private long lastVoiceTcpAttemptLogAt = 0L;
     private long lastVoiceTcpDropLogAt = 0L;
+    private long lastVoiceTcpQueueDropLogAt = 0L;
+    private final Object voiceTcpInboundWorkerLock = new Object();
+    private Thread voiceTcpInboundWorkerThread;
+    private volatile boolean voiceTcpInboundWorkerRunning = false;
+    private final Object voiceTcpInboundQueueLock = new Object();
+    private final ArrayDeque<QueuedTcpVoicePacket> voiceTcpInboundQueue = new ArrayDeque<QueuedTcpVoicePacket>();
     private boolean firstTcpVoiceLogged = false;
     
     // MCOSE version checking
@@ -95,6 +104,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private long connectionStartTime = System.currentTimeMillis();
     private static final long VERSION_CHECK_GRACE_PERIOD_MS = 10000; // 10 seconds to send version
     private boolean modProtocolNegotiated = false;
+    private int remoteModProtocolVersion = 0;
+    private int negotiatedModFeatures = 0;
     private RegistrySyncSnapshot syncedRegistrySnapshot = null;
     
     private final String msgPlayerLeave;
@@ -110,6 +121,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
     public void setReceivedKeepAlive(boolean receivedKeepAlive) {
         this.receivedKeepAlive = receivedKeepAlive;
+    }
+
+    public boolean supportsChunkZstd() {
+        return (this.negotiatedModFeatures & ModProtocol.FEATURE_CHUNK_ZSTD) != 0;
     }
 
     // markLoginPacketSent no-op (kept for compatibility)
@@ -260,6 +275,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
     public void disconnect(String s) {
         if (disconnected) return; // Poseidon: Kick/Disconnect spam fix
+        stopVoiceTcpInboundWorker(true);
 
         // CraftBukkit start
         String leaveMessage = this.msgPlayerLeave.replace("%player%", this.player.name);
@@ -755,16 +771,20 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 			return;
 		}
 
-        if(this.minecraftServer.chatRoomManager.shouldRouteVoiceToRoom(this.player)) {
-            logVoiceTcpAttempt(now, packet64voice.audioData.length, stopMarker ? "room-stop" : "room");
-            Packet64Voice outbound = packet64voice.cloneForForwarding(this.player.id, 0.0F, this.player.name);
-            this.minecraftServer.chatRoomManager.broadcastVoice(this.player, outbound);
-            return;
+        boolean routeToRoom = this.minecraftServer.chatRoomManager.shouldRouteVoiceToRoom(this.player);
+        String route = routeToRoom ? (stopMarker ? "room-stop" : "room") : (stopMarker ? "proximity-stop" : "proximity");
+        logVoiceTcpAttempt(now, packet64voice.audioData.length, route);
+
+        Packet64Voice outbound;
+        if (routeToRoom) {
+            outbound = packet64voice.cloneForForwarding(this.player.id, 0.0F, this.player.name);
+        } else {
+            outbound = packet64voice.cloneForForwarding(this.player.id, (float) this.minecraftServer.getVoiceChatBroadcastRadius(), this.player.name);
         }
 
-        logVoiceTcpAttempt(now, packet64voice.audioData.length, stopMarker ? "proximity-stop" : "proximity");
-        Packet64Voice outbound = packet64voice.cloneForForwarding(this.player.id, (float) this.minecraftServer.getVoiceChatBroadcastRadius(), this.player.name);
-        this.minecraftServer.serverConfigurationManager.sendPacketNearby(this.player, this.player.locX, this.player.locY, this.player.locZ, this.minecraftServer.getVoiceChatBroadcastRadius(), this.player.dimension, outbound);
+        if (!enqueueTcpVoiceInbound(now, packet64voice.audioData.length, outbound, routeToRoom)) {
+            logVoiceTcpDrop(now, packet64voice.audioData.length, "queue-overflow");
+        }
     }
 
     private void logVoiceTcpAttempt(long now, int payloadLength, String route) {
@@ -815,6 +835,122 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         this.voiceTcpPacketsInWindow++;
         this.voiceTcpBytesInWindow += safePayloadLength;
         return false;
+    }
+
+    private boolean enqueueTcpVoiceInbound(long now, int payloadLength, Packet64Voice outbound, boolean routeToRoom) {
+        if (outbound == null) {
+            return false;
+        }
+        startVoiceTcpInboundWorker();
+        synchronized (this.voiceTcpInboundQueueLock) {
+            if (this.voiceTcpInboundQueue.size() >= VOICE_TCP_INBOUND_QUEUE_MAX_PACKETS) {
+                this.voiceTcpInboundQueue.pollFirst();
+                if (now - this.lastVoiceTcpQueueDropLogAt >= VOICE_TCP_QUEUE_DROP_LOG_INTERVAL_MS) {
+                    this.lastVoiceTcpQueueDropLogAt = now;
+                    String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
+                    a.info(
+                        "[VoiceChat][ServerTcpRx] Dropped oldest queued voice packet for " + playerName +
+                        ", reason=queue-overflow, bytes=" + payloadLength +
+                        ", maxPackets=" + VOICE_TCP_INBOUND_QUEUE_MAX_PACKETS
+                    );
+                }
+                return false;
+            }
+            this.voiceTcpInboundQueue.offerLast(new QueuedTcpVoicePacket(outbound, routeToRoom));
+            this.voiceTcpInboundQueueLock.notifyAll();
+            return true;
+        }
+    }
+
+    private void startVoiceTcpInboundWorker() {
+        synchronized (this.voiceTcpInboundWorkerLock) {
+            if (this.voiceTcpInboundWorkerRunning) {
+                return;
+            }
+            this.voiceTcpInboundWorkerRunning = true;
+            String playerName = this.player != null && this.player.name != null ? this.player.name : "unknown";
+            Thread worker = new Thread(new Runnable() {
+                public void run() {
+                    runVoiceTcpInboundWorkerLoop();
+                }
+            }, "VoiceTcpInbound-" + playerName);
+            worker.setDaemon(true);
+            this.voiceTcpInboundWorkerThread = worker;
+            worker.start();
+        }
+    }
+
+    private void stopVoiceTcpInboundWorker(boolean clearQueue) {
+        Thread workerToJoin = null;
+        synchronized (this.voiceTcpInboundWorkerLock) {
+            if (this.voiceTcpInboundWorkerRunning) {
+                this.voiceTcpInboundWorkerRunning = false;
+                workerToJoin = this.voiceTcpInboundWorkerThread;
+                this.voiceTcpInboundWorkerThread = null;
+            }
+        }
+        if (workerToJoin != null) {
+            workerToJoin.interrupt();
+            synchronized (this.voiceTcpInboundQueueLock) {
+                this.voiceTcpInboundQueueLock.notifyAll();
+            }
+            if (Thread.currentThread() != workerToJoin) {
+                try {
+                    workerToJoin.join(120L);
+                } catch (InterruptedException ignored) {}
+            }
+        }
+        if (clearQueue) {
+            synchronized (this.voiceTcpInboundQueueLock) {
+                this.voiceTcpInboundQueue.clear();
+            }
+        }
+    }
+
+    private void runVoiceTcpInboundWorkerLoop() {
+        while (this.voiceTcpInboundWorkerRunning) {
+            try {
+                QueuedTcpVoicePacket queued = null;
+                synchronized (this.voiceTcpInboundQueueLock) {
+                    if (this.voiceTcpInboundQueue.isEmpty()) {
+                        this.voiceTcpInboundQueueLock.wait(25L);
+                    }
+                    if (!this.voiceTcpInboundQueue.isEmpty()) {
+                        queued = this.voiceTcpInboundQueue.pollFirst();
+                    }
+                }
+                if (queued == null) {
+                    continue;
+                }
+                processQueuedTcpVoicePacket(queued);
+            } catch (InterruptedException ignored) {
+                break;
+            } catch (Throwable t) {
+                a.warning("[VoiceChat][ServerTcpRx] Worker error: " + t.getMessage());
+            }
+        }
+    }
+
+    private void processQueuedTcpVoicePacket(QueuedTcpVoicePacket queued) {
+        if (queued == null || queued.packet == null || this.disconnected || this.player == null) {
+            return;
+        }
+        if (!this.minecraftServer.isVoiceChatEnabled()) {
+            return;
+        }
+        if (queued.routeToRoom) {
+            this.minecraftServer.chatRoomManager.broadcastVoice(this.player, queued.packet);
+            return;
+        }
+        this.minecraftServer.serverConfigurationManager.sendPacketNearby(
+            this.player,
+            this.player.locX,
+            this.player.locY,
+            this.player.locZ,
+            this.minecraftServer.getVoiceChatBroadcastRadius(),
+            this.player.dimension,
+            queued.packet
+        );
     }
 
 	private boolean canUseVoiceChat() {
@@ -1235,6 +1371,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
     public void a(String s, Object[] aobject) {
         if (this.disconnected) return; // CraftBukkit - rarely it would send a disconnect line twice
+        stopVoiceTcpInboundWorker(true);
 
 
         if (!(boolean) PoseidonConfig.getInstance().getConfigOption("settings.remove-join-leave-debug", true) || !s.equals("disconnect.quitting")) {
@@ -1864,6 +2001,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet101CloseWindow packet101closewindow) {
+        PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet101closewindow);
+        server.getPluginManager().callEvent(event);
+        if (event.isCancelled()) return;
+
+
         if (this.player.dead) return; // CraftBukkit
 
         this.player.A();
@@ -2156,10 +2298,23 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
 
         if (ModProtocol.CHANNEL_HELLO.equals(packet250custompayload.channel)) {
-            int remoteVersion = ModProtocol.readHelloVersion(packet250custompayload.data);
-            this.modProtocolNegotiated = (remoteVersion == ModProtocol.PROTOCOL_VERSION);
-            if (this.modProtocolNegotiated) {
-                this.sendPacket(new Packet250CustomPayload(ModProtocol.CHANNEL_HELLO_ACK, ModProtocol.createHelloAckPayload()));
+            ModProtocol.HelloInfo helloInfo = ModProtocol.readHelloInfo(packet250custompayload.data);
+            this.remoteModProtocolVersion = helloInfo.version;
+            this.negotiatedModFeatures = 0;
+            this.modProtocolNegotiated = false;
+
+            if (helloInfo.version == ModProtocol.PROTOCOL_VERSION) {
+                this.modProtocolNegotiated = true;
+                int serverFeatures = ModProtocol.resolveServerSupportedFeatures();
+                this.negotiatedModFeatures = helloInfo.featureBits & serverFeatures;
+                this.sendPacket(new Packet250CustomPayload(
+                        ModProtocol.CHANNEL_HELLO_ACK,
+                        ModProtocol.createHelloAckPayload(ModProtocol.PROTOCOL_VERSION, this.negotiatedModFeatures)));
+            } else if (helloInfo.version == ModProtocol.PROTOCOL_VERSION_LEGACY) {
+                this.modProtocolNegotiated = true;
+                this.sendPacket(new Packet250CustomPayload(
+                        ModProtocol.CHANNEL_HELLO_ACK,
+                        ModProtocol.createHelloAckPayload(ModProtocol.PROTOCOL_VERSION_LEGACY, 0)));
             }
             return;
         }
@@ -2169,7 +2324,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 return;
             }
             int requestVersion = ModProtocol.readRegistryRequestVersion(packet250custompayload.data);
-            if (requestVersion != ModProtocol.PROTOCOL_VERSION) {
+            if (requestVersion != this.remoteModProtocolVersion) {
                 return;
             }
             this.syncedRegistrySnapshot = RegistrySyncSnapshot.captureLocal();
@@ -2568,5 +2723,15 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             .suggest(commandMap, this.getPlayer(), packet203tabcomplete.text, packet203tabcomplete.text.length());
         String[] responseArray = completions.toArray(new String[0]);
         this.sendPacket(new Packet203TabComplete(responseArray));
+    }
+
+    private static final class QueuedTcpVoicePacket {
+        private final Packet64Voice packet;
+        private final boolean routeToRoom;
+
+        private QueuedTcpVoicePacket(Packet64Voice packet, boolean routeToRoom) {
+            this.packet = packet;
+            this.routeToRoom = routeToRoom;
+        }
     }
 }

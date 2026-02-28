@@ -40,9 +40,20 @@ public class BlockTNT extends Block {
     }
 
     public void d(World world, int i, int j, int k) {
+        this.primeByExplosion(world, i, j, k, null, null);
+    }
+
+    // UberBukkit - Preserve TNT source tracking for chain reactions while matching vanilla fuse randomization.
+    public void primeByExplosion(World world, int i, int j, int k, EntityLiving igniter, String igniterName) {
         if (!world.isStatic) {
             EntityTNTPrimed entitytntprimed = new EntityTNTPrimed(world, (double) ((float) i + 0.5F), (double) ((float) j + 0.5F), (double) ((float) k + 0.5F));
-            entitytntprimed.sourceName = consumePlacedBy(world, i, j, k);
+            entitytntprimed.source = igniter;
+            String placedBy = consumePlacedBy(world, i, j, k);
+            if (igniterName != null) {
+                entitytntprimed.sourceName = igniterName;
+            } else {
+                entitytntprimed.sourceName = placedBy;
+            }
 
             entitytntprimed.fuseTicks = world.random.nextInt(entitytntprimed.fuseTicks / 4) + entitytntprimed.fuseTicks / 8;
             world.addEntity(entitytntprimed);

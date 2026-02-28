@@ -62,6 +62,7 @@ public final class CommandAutocompleteRegistry {
         "tntexplodes",
         "mobGriefing",
         "doWeatherCycle",
+        "doFireTick",
         "showDeathMessages",
         "sleepEnabled",
         "advertiseAchievements",

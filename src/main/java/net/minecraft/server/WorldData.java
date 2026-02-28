@@ -64,6 +64,7 @@ public class WorldData {
         if (nbttagcompound.hasKey("TNTExplodes")) this.tntexplodes = nbttagcompound.m("TNTExplodes");
         if (nbttagcompound.hasKey("MobGriefing")) this.mobGriefing = nbttagcompound.m("MobGriefing");
         if (nbttagcompound.hasKey("DoWeatherCycle")) this.doWeatherCycle = nbttagcompound.m("DoWeatherCycle");
+        if (nbttagcompound.hasKey("DoFireTick")) this.doFireTick = nbttagcompound.m("DoFireTick");
         if (nbttagcompound.hasKey("ShowDeathMessages")) this.showDeathMessages = nbttagcompound.m("ShowDeathMessages");
         if (nbttagcompound.hasKey("SleepEnabled")) this.sleepEnabled = nbttagcompound.m("SleepEnabled");
         if (nbttagcompound.hasKey("AdvertiseAchievements")) this.advertiseAchievements = nbttagcompound.m("AdvertiseAchievements");
@@ -97,6 +98,16 @@ public class WorldData {
         this.alphaSnow = worlddata.alphaSnow;
         this.hardcore = worlddata.hardcore;
         this.difficulty = worlddata.difficulty;
+        this.doDayNightCycle = worlddata.doDayNightCycle;
+        this.tntexplodes = worlddata.tntexplodes;
+        this.mobGriefing = worlddata.mobGriefing;
+        this.doWeatherCycle = worlddata.doWeatherCycle;
+        this.doFireTick = worlddata.doFireTick;
+        this.showDeathMessages = worlddata.showDeathMessages;
+        this.advertiseAchievements = worlddata.advertiseAchievements;
+        this.sleepEnabled = worlddata.sleepEnabled;
+        this.keepInventory = worlddata.keepInventory;
+        this.spawnRadius = worlddata.spawnRadius;
     }
 
     public NBTTagCompound a() {
@@ -149,6 +160,7 @@ public class WorldData {
         nbttagcompound.a("TNTExplodes", this.tntexplodes);
         nbttagcompound.a("MobGriefing", this.mobGriefing);
         nbttagcompound.a("DoWeatherCycle", this.doWeatherCycle);
+        nbttagcompound.a("DoFireTick", this.doFireTick);
         nbttagcompound.a("ShowDeathMessages", this.showDeathMessages);
         nbttagcompound.a("SleepEnabled", this.sleepEnabled);
         nbttagcompound.a("AdvertiseAchievements", this.advertiseAchievements);
@@ -268,6 +280,7 @@ public class WorldData {
     private boolean tntexplodes = true;
     private boolean mobGriefing = true;
     private boolean doWeatherCycle = true;
+    private boolean doFireTick = true;
     private boolean showDeathMessages = true;
     private boolean advertiseAchievements = true; // Default to true - broadcast achievements to all players
     private boolean sleepEnabled = false; // If true, sleeping in beds is enabled
@@ -285,6 +298,8 @@ public class WorldData {
     public void setMobGriefing(boolean v) { this.mobGriefing = v; }
     public boolean getDoWeatherCycle() { return this.doWeatherCycle; }
     public void setDoWeatherCycle(boolean v) { this.doWeatherCycle = v; }
+    public boolean getDoFireTick() { return this.doFireTick; }
+    public void setDoFireTick(boolean v) { this.doFireTick = v; }
     public boolean getShowDeathMessages() { return this.showDeathMessages; }
     public void setShowDeathMessages(boolean v) { this.showDeathMessages = v; }
     public boolean getSleepEnabled() { return this.sleepEnabled; }

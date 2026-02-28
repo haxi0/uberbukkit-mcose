@@ -1038,7 +1038,18 @@ public class MinecraftServer implements Runnable, ICommandListener {
             pendingLogins,
             activeHandlers,
             ChunkCompressionThread.getTotalQueueSize(),
-            ChunkCompressionThread.getTotalQueueCapacity()
+            ChunkCompressionThread.getTotalQueueCapacity(),
+            ChunkCompressionThread.getNetChunkZstdPacketsTotal(),
+            ChunkCompressionThread.getNetChunkZlibPacketsTotal(),
+            ChunkCompressionThread.getNetChunkZstdFallbackTotal(),
+            ChunkCompressionThread.getNetChunkCompressionFailuresTotal(),
+            ChunkCompressionThread.getNetChunkZstdCompressNanosTotal(),
+            ChunkCompressionThread.getNetChunkZlibCompressNanosTotal(),
+            ChunkBuffer.getRegionWriteZstdTotal(),
+            ChunkBuffer.getRegionWriteZlibTotal(),
+            ChunkBuffer.getRegionWriteZstdFallbackTotal(),
+            ChunkBuffer.getRegionWriteZstdNanosTotal(),
+            ChunkBuffer.getRegionWriteZlibNanosTotal()
         );
 
         int playerCount = this.serverConfigurationManager != null ? this.serverConfigurationManager.players.size() : 0;

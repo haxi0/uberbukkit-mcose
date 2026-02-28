@@ -2,13 +2,17 @@ package org.bukkit.craftbukkit;
 
 import net.minecraft.server.EntityPlayer;
 import net.minecraft.server.Packet;
+import net.minecraft.server.Packet202MapChunkZstd;
 import net.minecraft.server.Packet51MapChunk;
+import net.minecraft.server.ZstdRuntime;
 import net.minecraft.server.threading.ThreadingConfig;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.Deflater;
 
 public final class ChunkCompressionThread {
@@ -18,10 +22,26 @@ public final class ChunkCompressionThread {
     private static final int REDUCED_DEFLATE_THRESHOLD = CHUNK_SIZE / 4;
     private static final int DEFLATE_LEVEL_CHUNKS = 6;
     private static final int DEFLATE_LEVEL_PARTS = 1;
+    private static final int ZSTD_LEVEL = 3;
+    private static final int METRIC_SAMPLE_RING_SIZE = 512;
 
     private final Object lifecycleLock = new Object();
     private final HashMap<EntityPlayer, Integer> queueSizePerPlayer = new HashMap<EntityPlayer, Integer>();
     private final AtomicInteger totalQueuedPackets = new AtomicInteger(0);
+    private final AtomicLong zstdChunkPacketsSent = new AtomicLong(0L);
+    private final AtomicLong zlibChunkPacketsSent = new AtomicLong(0L);
+    private final AtomicLong zstdFallbackCount = new AtomicLong(0L);
+    private final AtomicLong compressionFailureCount = new AtomicLong(0L);
+    private final AtomicLong netChunkZstdPacketsTotal = new AtomicLong(0L);
+    private final AtomicLong netChunkZlibPacketsTotal = new AtomicLong(0L);
+    private final AtomicLong netChunkZstdFallbackTotal = new AtomicLong(0L);
+    private final AtomicLong netChunkCompressionFailuresTotal = new AtomicLong(0L);
+    private final AtomicLong netChunkZstdCompressNanosTotal = new AtomicLong(0L);
+    private final AtomicLong netChunkZlibCompressNanosTotal = new AtomicLong(0L);
+    private final Object metricsLock = new Object();
+    private final long[] compressionSampleNanos = new long[METRIC_SAMPLE_RING_SIZE];
+    private int compressionSampleWriteIndex = 0;
+    private int compressionSampleCount = 0;
 
     private volatile boolean running = false;
     private Worker[] workers = new Worker[0];
@@ -98,18 +118,93 @@ public final class ChunkCompressionThread {
 
     private void handleQueuedPacket(QueuedPacket queuedPacket, Worker worker) {
         try {
-            handleMapChunk((Packet51MapChunk) queuedPacket.packet, worker);
-            sendToNetworkQueue(queuedPacket);
+            Packet outbound = prepareMapChunkPacket((Packet51MapChunk) queuedPacket.packet, queuedPacket.player, worker);
+            sendToNetworkQueue(queuedPacket.player, outbound);
         } finally {
             addToPlayerQueueSize(queuedPacket.player, -1);
             this.totalQueuedPackets.decrementAndGet();
         }
     }
 
-    private void handleMapChunk(Packet51MapChunk packet, Worker worker) {
-        // If 'packet.g' is set then this packet has already been compressed.
+    private Packet prepareMapChunkPacket(Packet51MapChunk source, EntityPlayer player, Worker worker) {
+        if (source == null) {
+            this.compressionFailureCount.incrementAndGet();
+            this.netChunkCompressionFailuresTotal.incrementAndGet();
+            return null;
+        }
+
+        long start = System.nanoTime();
+        try {
+            boolean supportsZstd = player != null
+                    && player.netServerHandler != null
+                    && player.netServerHandler.supportsChunkZstd();
+            if (supportsZstd && ZstdRuntime.isAvailable()) {
+                long zstdStart = System.nanoTime();
+                Packet202MapChunkZstd zstdPacket = compressMapChunkZstd(source);
+                if (zstdPacket != null) {
+                    long zstdDuration = System.nanoTime() - zstdStart;
+                    if (zstdDuration > 0L) {
+                        this.netChunkZstdCompressNanosTotal.addAndGet(zstdDuration);
+                    }
+                    this.zstdChunkPacketsSent.incrementAndGet();
+                    this.netChunkZstdPacketsTotal.incrementAndGet();
+                    return zstdPacket;
+                }
+                this.zstdFallbackCount.incrementAndGet();
+                this.netChunkZstdFallbackTotal.incrementAndGet();
+            }
+
+            long zlibStart = System.nanoTime();
+            try {
+                compressMapChunkDeflate(source, worker);
+            } finally {
+                long zlibDuration = System.nanoTime() - zlibStart;
+                if (zlibDuration > 0L) {
+                    this.netChunkZlibCompressNanosTotal.addAndGet(zlibDuration);
+                }
+            }
+            this.zlibChunkPacketsSent.incrementAndGet();
+            this.netChunkZlibPacketsTotal.incrementAndGet();
+            return source;
+        } catch (Throwable t) {
+            this.compressionFailureCount.incrementAndGet();
+            this.netChunkCompressionFailuresTotal.incrementAndGet();
+            return source;
+        } finally {
+            recordCompressionSample(System.nanoTime() - start);
+        }
+    }
+
+    private Packet202MapChunkZstd compressMapChunkZstd(Packet51MapChunk source) {
+        if (source.rawData == null) {
+            return null;
+        }
+
+        byte[] compressed = ZstdRuntime.compressZstd(source.rawData, 0, source.rawData.length, ZSTD_LEVEL);
+        if (compressed == null || compressed.length <= 0) {
+            return null;
+        }
+
+        Packet202MapChunkZstd zstd = new Packet202MapChunkZstd();
+        zstd.a = source.a;
+        zstd.b = source.b;
+        zstd.c = source.c;
+        zstd.d = source.d;
+        zstd.e = source.e;
+        zstd.f = source.f;
+        zstd.g = compressed;
+        zstd.h = compressed.length;
+        zstd.k = true;
+        zstd.rawData = source.rawData;
+        return zstd;
+    }
+
+    private void compressMapChunkDeflate(Packet51MapChunk packet, Worker worker) {
         if (packet.g != null) {
             return;
+        }
+        if (packet.rawData == null) {
+            throw new IllegalStateException("Chunk packet missing rawData for zlib compression");
         }
 
         int dataSize = packet.rawData.length;
@@ -127,14 +222,110 @@ public final class ChunkCompressionThread {
             size = deflater.deflate(worker.deflateBuffer);
         }
 
-        // copy compressed data to packet
         packet.g = new byte[size];
         packet.h = size;
         System.arraycopy(worker.deflateBuffer, 0, packet.g, 0, size);
     }
 
-    private void sendToNetworkQueue(QueuedPacket queuedPacket) {
-        queuedPacket.player.netServerHandler.networkManager.queue(queuedPacket.packet);
+    private void sendToNetworkQueue(EntityPlayer player, Packet packet) {
+        if (player == null || player.netServerHandler == null || player.netServerHandler.networkManager == null || packet == null) {
+            return;
+        }
+        player.netServerHandler.networkManager.queue(packet);
+    }
+
+    private void recordCompressionSample(long durationNanos) {
+        if (durationNanos < 0L) {
+            return;
+        }
+
+        synchronized (this.metricsLock) {
+            this.compressionSampleNanos[this.compressionSampleWriteIndex] = durationNanos;
+            this.compressionSampleWriteIndex = (this.compressionSampleWriteIndex + 1) % this.compressionSampleNanos.length;
+            if (this.compressionSampleCount < this.compressionSampleNanos.length) {
+                ++this.compressionSampleCount;
+            }
+        }
+    }
+
+    public static long getZstdChunkPacketsSent() {
+        return instance.zstdChunkPacketsSent.get();
+    }
+
+    public static long getZlibChunkPacketsSent() {
+        return instance.zlibChunkPacketsSent.get();
+    }
+
+    public static long getZstdFallbackCount() {
+        return instance.zstdFallbackCount.get();
+    }
+
+    public static long getCompressionFailureCount() {
+        return instance.compressionFailureCount.get();
+    }
+
+    public static long getCompressionAvgMicros() {
+        return instance.computeCompressionAvgMicros();
+    }
+
+    public static long getCompressionP95Micros() {
+        return instance.computeCompressionP95Micros();
+    }
+
+    public static long getNetChunkZstdPacketsTotal() {
+        return instance.netChunkZstdPacketsTotal.get();
+    }
+
+    public static long getNetChunkZlibPacketsTotal() {
+        return instance.netChunkZlibPacketsTotal.get();
+    }
+
+    public static long getNetChunkZstdFallbackTotal() {
+        return instance.netChunkZstdFallbackTotal.get();
+    }
+
+    public static long getNetChunkCompressionFailuresTotal() {
+        return instance.netChunkCompressionFailuresTotal.get();
+    }
+
+    public static long getNetChunkZstdCompressNanosTotal() {
+        return instance.netChunkZstdCompressNanosTotal.get();
+    }
+
+    public static long getNetChunkZlibCompressNanosTotal() {
+        return instance.netChunkZlibCompressNanosTotal.get();
+    }
+
+    private long computeCompressionAvgMicros() {
+        synchronized (this.metricsLock) {
+            if (this.compressionSampleCount <= 0) {
+                return 0L;
+            }
+
+            long total = 0L;
+            for (int i = 0; i < this.compressionSampleCount; ++i) {
+                total += this.compressionSampleNanos[i];
+            }
+            return (total / (long) this.compressionSampleCount) / 1000L;
+        }
+    }
+
+    private long computeCompressionP95Micros() {
+        synchronized (this.metricsLock) {
+            if (this.compressionSampleCount <= 0) {
+                return 0L;
+            }
+
+            long[] copy = Arrays.copyOf(this.compressionSampleNanos, this.compressionSampleCount);
+            Arrays.sort(copy);
+            int index = (int) Math.ceil((double) copy.length * 0.95D) - 1;
+            if (index < 0) {
+                index = 0;
+            } else if (index >= copy.length) {
+                index = copy.length - 1;
+            }
+            return copy[index] / 1000L;
+        }
     }
 
     public static boolean sendPacket(EntityPlayer player, Packet packet) {
@@ -159,7 +350,12 @@ public final class ChunkCompressionThread {
         }
 
         Worker worker = this.workers[selectWorkerIndex(player)];
-        QueuedPacket task = new QueuedPacket(player, packet);
+        Packet packetForQueue = packet.clone();
+        if (!(packetForQueue instanceof Packet51MapChunk)) {
+            return false;
+        }
+
+        QueuedPacket task = new QueuedPacket(player, packetForQueue);
         if (!worker.offer(task)) {
             return false;
         }

@@ -111,6 +111,17 @@ public class ServerProfiler {
     private long trackingStateRecoveryTicks = 0L;
     private String currentTrackingState = "NORMAL";
     private long trackingLastTransitionMillis = 0L;
+    private long lastNetChunkZstdPacketsTotal = 0L;
+    private long lastNetChunkZlibPacketsTotal = 0L;
+    private long lastNetChunkZstdFallbackTotal = 0L;
+    private long lastNetChunkCompressionFailuresTotal = 0L;
+    private long lastNetChunkZstdCompressNanosTotal = 0L;
+    private long lastNetChunkZlibCompressNanosTotal = 0L;
+    private long lastRegionWriteZstdTotal = 0L;
+    private long lastRegionWriteZlibTotal = 0L;
+    private long lastRegionWriteZstdFallbackTotal = 0L;
+    private long lastRegionWriteZstdNanosTotal = 0L;
+    private long lastRegionWriteZlibNanosTotal = 0L;
 
     // Auto snapshots
     private final Queue<ProfileSnapshot> recentAutoSnapshots = new ArrayDeque<ProfileSnapshot>();
@@ -181,6 +192,17 @@ public class ServerProfiler {
             this.trackingStateRecoveryTicks = 0L;
             this.currentTrackingState = "NORMAL";
             this.trackingLastTransitionMillis = 0L;
+            this.lastNetChunkZstdPacketsTotal = 0L;
+            this.lastNetChunkZlibPacketsTotal = 0L;
+            this.lastNetChunkZstdFallbackTotal = 0L;
+            this.lastNetChunkCompressionFailuresTotal = 0L;
+            this.lastNetChunkZstdCompressNanosTotal = 0L;
+            this.lastNetChunkZlibCompressNanosTotal = 0L;
+            this.lastRegionWriteZstdTotal = 0L;
+            this.lastRegionWriteZlibTotal = 0L;
+            this.lastRegionWriteZstdFallbackTotal = 0L;
+            this.lastRegionWriteZstdNanosTotal = 0L;
+            this.lastRegionWriteZlibNanosTotal = 0L;
         }
     }
 
@@ -334,7 +356,18 @@ public class ServerProfiler {
                                   int pendingLoginCount,
                                   int activeHandlerCount,
                                   int chunkCompressionQueueSize,
-                                  int chunkCompressionQueueCapacity) {
+                                  int chunkCompressionQueueCapacity,
+                                  long netChunkZstdPacketsTotal,
+                                  long netChunkZlibPacketsTotal,
+                                  long netChunkZstdFallbackTotal,
+                                  long netChunkCompressionFailuresTotal,
+                                  long netChunkZstdCompressNanosTotal,
+                                  long netChunkZlibCompressNanosTotal,
+                                  long regionWriteZstdTotal,
+                                  long regionWriteZlibTotal,
+                                  long regionWriteZstdFallbackTotal,
+                                  long regionWriteZstdNanosTotal,
+                                  long regionWriteZlibNanosTotal) {
         long now = System.currentTimeMillis();
         synchronized (telemetryLock) {
             RingBufferSample sample = getOrCreateCurrentSampleLocked(now);
@@ -368,6 +401,42 @@ public class ServerProfiler {
                 sample.chunkCompressionQueueMax = chunkCompressionQueueSize;
             }
             sample.chunkCompressionQueueCapacity = chunkCompressionQueueCapacity;
+
+            long netChunkZstdPacketsDelta = computeNonNegativeDelta(netChunkZstdPacketsTotal, this.lastNetChunkZstdPacketsTotal);
+            long netChunkZlibPacketsDelta = computeNonNegativeDelta(netChunkZlibPacketsTotal, this.lastNetChunkZlibPacketsTotal);
+            long netChunkZstdFallbackDelta = computeNonNegativeDelta(netChunkZstdFallbackTotal, this.lastNetChunkZstdFallbackTotal);
+            long netChunkCompressionFailuresDelta = computeNonNegativeDelta(netChunkCompressionFailuresTotal, this.lastNetChunkCompressionFailuresTotal);
+            long netChunkZstdNanosDelta = computeNonNegativeDelta(netChunkZstdCompressNanosTotal, this.lastNetChunkZstdCompressNanosTotal);
+            long netChunkZlibNanosDelta = computeNonNegativeDelta(netChunkZlibCompressNanosTotal, this.lastNetChunkZlibCompressNanosTotal);
+            long regionWriteZstdDelta = computeNonNegativeDelta(regionWriteZstdTotal, this.lastRegionWriteZstdTotal);
+            long regionWriteZlibDelta = computeNonNegativeDelta(regionWriteZlibTotal, this.lastRegionWriteZlibTotal);
+            long regionWriteZstdFallbackDelta = computeNonNegativeDelta(regionWriteZstdFallbackTotal, this.lastRegionWriteZstdFallbackTotal);
+            long regionWriteZstdNanosDelta = computeNonNegativeDelta(regionWriteZstdNanosTotal, this.lastRegionWriteZstdNanosTotal);
+            long regionWriteZlibNanosDelta = computeNonNegativeDelta(regionWriteZlibNanosTotal, this.lastRegionWriteZlibNanosTotal);
+
+            this.lastNetChunkZstdPacketsTotal = netChunkZstdPacketsTotal;
+            this.lastNetChunkZlibPacketsTotal = netChunkZlibPacketsTotal;
+            this.lastNetChunkZstdFallbackTotal = netChunkZstdFallbackTotal;
+            this.lastNetChunkCompressionFailuresTotal = netChunkCompressionFailuresTotal;
+            this.lastNetChunkZstdCompressNanosTotal = netChunkZstdCompressNanosTotal;
+            this.lastNetChunkZlibCompressNanosTotal = netChunkZlibCompressNanosTotal;
+            this.lastRegionWriteZstdTotal = regionWriteZstdTotal;
+            this.lastRegionWriteZlibTotal = regionWriteZlibTotal;
+            this.lastRegionWriteZstdFallbackTotal = regionWriteZstdFallbackTotal;
+            this.lastRegionWriteZstdNanosTotal = regionWriteZstdNanosTotal;
+            this.lastRegionWriteZlibNanosTotal = regionWriteZlibNanosTotal;
+
+            sample.netChunkZstdPackets += netChunkZstdPacketsDelta;
+            sample.netChunkZlibPackets += netChunkZlibPacketsDelta;
+            sample.netChunkZstdFallbacks += netChunkZstdFallbackDelta;
+            sample.netChunkCompressionFailures += netChunkCompressionFailuresDelta;
+            sample.netChunkZstdCompressNanos += netChunkZstdNanosDelta;
+            sample.netChunkZlibCompressNanos += netChunkZlibNanosDelta;
+            sample.regionWriteZstd += regionWriteZstdDelta;
+            sample.regionWriteZlib += regionWriteZlibDelta;
+            sample.regionWriteZstdFallbacks += regionWriteZstdFallbackDelta;
+            sample.regionWriteZstdNanos += regionWriteZstdNanosDelta;
+            sample.regionWriteZlibNanos += regionWriteZlibNanosDelta;
             sample.queueSampleCount++;
         }
     }
@@ -786,6 +855,21 @@ public class ServerProfiler {
         sb.append("  Outbound low avg/max: ").append(formatDouble(snapshot.queueStats.outboundLowAvg)).append(" / ").append(snapshot.queueStats.outboundLowMax).append('\n');
         sb.append("  Outbound bytes avg/max: ").append(formatDouble(snapshot.queueStats.outboundBytesAvg)).append(" / ").append(snapshot.queueStats.outboundBytesMax).append('\n');
         sb.append("  Chunk compression max/cap: ").append(snapshot.queueStats.chunkCompressionMax).append(" / ").append(snapshot.queueStats.chunkCompressionCapacity).append('\n');
+        sb.append("  Chunk Codec (window) zstd/zlib/fallback/fail: ")
+            .append(snapshot.queueStats.netChunkZstdPackets).append(" / ")
+            .append(snapshot.queueStats.netChunkZlibPackets).append(" / ")
+            .append(snapshot.queueStats.netChunkZstdFallbacks).append(" / ")
+            .append(snapshot.queueStats.netChunkCompressionFailures)
+            .append(" | zstdAvgUs=").append(formatDouble(snapshot.queueStats.netChunkZstdAvgMicros))
+            .append(" zlibAvgUs=").append(formatDouble(snapshot.queueStats.netChunkZlibAvgMicros))
+            .append('\n');
+        sb.append("  Region Codec Writes (window) zstd/zlib/fallback: ")
+            .append(snapshot.queueStats.regionWriteZstd).append(" / ")
+            .append(snapshot.queueStats.regionWriteZlib).append(" / ")
+            .append(snapshot.queueStats.regionWriteZstdFallbacks)
+            .append(" | zstdAvgUs=").append(formatDouble(snapshot.queueStats.regionWriteZstdAvgMicros))
+            .append(" zlibAvgUs=").append(formatDouble(snapshot.queueStats.regionWriteZlibAvgMicros))
+            .append('\n');
         sb.append("  Movement coalesced/dropped: ").append(snapshot.queueStats.movementCoalescedPackets).append(" / ").append(snapshot.queueStats.movementDroppedPackets).append('\n');
         sb.append("  Tracking skips near/mid/far: ")
             .append(snapshot.queueStats.entityTrackingSkippedNear).append(" / ")
@@ -983,6 +1067,17 @@ public class ServerProfiler {
         appendJsonField(sb, "outboundBytesMax", snapshot.queueStats.outboundBytesMax, true, 4);
         appendJsonField(sb, "chunkCompressionMax", snapshot.queueStats.chunkCompressionMax, true, 4);
         appendJsonField(sb, "chunkCompressionCapacity", snapshot.queueStats.chunkCompressionCapacity, true, 4);
+        appendJsonField(sb, "netChunkZstdPackets", snapshot.queueStats.netChunkZstdPackets, true, 4);
+        appendJsonField(sb, "netChunkZlibPackets", snapshot.queueStats.netChunkZlibPackets, true, 4);
+        appendJsonField(sb, "netChunkZstdFallbacks", snapshot.queueStats.netChunkZstdFallbacks, true, 4);
+        appendJsonField(sb, "netChunkCompressionFailures", snapshot.queueStats.netChunkCompressionFailures, true, 4);
+        appendJsonField(sb, "netChunkZstdAvgMicros", snapshot.queueStats.netChunkZstdAvgMicros, true, 4);
+        appendJsonField(sb, "netChunkZlibAvgMicros", snapshot.queueStats.netChunkZlibAvgMicros, true, 4);
+        appendJsonField(sb, "regionWriteZstd", snapshot.queueStats.regionWriteZstd, true, 4);
+        appendJsonField(sb, "regionWriteZlib", snapshot.queueStats.regionWriteZlib, true, 4);
+        appendJsonField(sb, "regionWriteZstdFallbacks", snapshot.queueStats.regionWriteZstdFallbacks, true, 4);
+        appendJsonField(sb, "regionWriteZstdAvgMicros", snapshot.queueStats.regionWriteZstdAvgMicros, true, 4);
+        appendJsonField(sb, "regionWriteZlibAvgMicros", snapshot.queueStats.regionWriteZlibAvgMicros, true, 4);
         appendJsonField(sb, "movementCoalescedPackets", snapshot.queueStats.movementCoalescedPackets, true, 4);
         appendJsonField(sb, "movementDroppedPackets", snapshot.queueStats.movementDroppedPackets, true, 4);
         appendJsonField(sb, "entityTrackingSkippedNear", snapshot.queueStats.entityTrackingSkippedNear, true, 4);
@@ -1200,6 +1295,19 @@ public class ServerProfiler {
             Runtime rt = Runtime.getRuntime();
             long usedMb = (rt.totalMemory() - rt.freeMemory()) / 1024L / 1024L;
             sb.append(" | Mem: ").append(usedMb).append("MB");
+
+            QueueStats statusQueueStats = buildQueueStatsLocked();
+            sb.append(" | NetCodec(zs/zl/fb/fail)=")
+                .append(statusQueueStats.netChunkZstdPackets).append('/')
+                .append(statusQueueStats.netChunkZlibPackets).append('/')
+                .append(statusQueueStats.netChunkZstdFallbacks).append('/')
+                .append(statusQueueStats.netChunkCompressionFailures)
+                .append(" zUs=").append(formatDouble(statusQueueStats.netChunkZstdAvgMicros));
+            sb.append(" | RegionCodec(zs/zl/fb)=")
+                .append(statusQueueStats.regionWriteZstd).append('/')
+                .append(statusQueueStats.regionWriteZlib).append('/')
+                .append(statusQueueStats.regionWriteZstdFallbacks)
+                .append(" zUs=").append(formatDouble(statusQueueStats.regionWriteZstdAvgMicros));
         }
 
         sb.append(" | AutoSnap: ").append(autoSnapshotEnabled ? "on" : "off");
@@ -1343,6 +1451,20 @@ public class ServerProfiler {
         return sorted.get(idx);
     }
 
+    private static long computeNonNegativeDelta(long current, long previous) {
+        if (current >= previous) {
+            return current - previous;
+        }
+        return Math.max(0L, current);
+    }
+
+    private static double nanosPerOperationMicros(long totalNanos, long operationCount) {
+        if (totalNanos <= 0L || operationCount <= 0L) {
+            return 0D;
+        }
+        return (totalNanos / (double) operationCount) / 1000D;
+    }
+
     private QueueStats buildQueueStatsLocked() {
         QueueStats stats = new QueueStats();
         List<RingBufferSample> samples = copyRingBufferLocked();
@@ -1356,6 +1478,10 @@ public class ServerProfiler {
         double lowTotal = 0D;
         double outBytesTotal = 0D;
         long sampleCount = 0L;
+        long netChunkZstdNanosTotal = 0L;
+        long netChunkZlibNanosTotal = 0L;
+        long regionWriteZstdNanosTotal = 0L;
+        long regionWriteZlibNanosTotal = 0L;
 
         for (RingBufferSample sample : samples) {
             long divisor = Math.max(1L, sample.queueSampleCount);
@@ -1398,6 +1524,17 @@ public class ServerProfiler {
             stats.entityTrackingSkippedNear += sample.entityTrackingSkippedNear;
             stats.entityTrackingSkippedMid += sample.entityTrackingSkippedMid;
             stats.entityTrackingSkippedFar += sample.entityTrackingSkippedFar;
+            stats.netChunkZstdPackets += sample.netChunkZstdPackets;
+            stats.netChunkZlibPackets += sample.netChunkZlibPackets;
+            stats.netChunkZstdFallbacks += sample.netChunkZstdFallbacks;
+            stats.netChunkCompressionFailures += sample.netChunkCompressionFailures;
+            stats.regionWriteZstd += sample.regionWriteZstd;
+            stats.regionWriteZlib += sample.regionWriteZlib;
+            stats.regionWriteZstdFallbacks += sample.regionWriteZstdFallbacks;
+            netChunkZstdNanosTotal += sample.netChunkZstdCompressNanos;
+            netChunkZlibNanosTotal += sample.netChunkZlibCompressNanos;
+            regionWriteZstdNanosTotal += sample.regionWriteZstdNanos;
+            regionWriteZlibNanosTotal += sample.regionWriteZlibNanos;
         }
 
         if (sampleCount > 0L) {
@@ -1407,6 +1544,11 @@ public class ServerProfiler {
             stats.outboundLowAvg = lowTotal / sampleCount;
             stats.outboundBytesAvg = outBytesTotal / sampleCount;
         }
+
+        stats.netChunkZstdAvgMicros = nanosPerOperationMicros(netChunkZstdNanosTotal, stats.netChunkZstdPackets);
+        stats.netChunkZlibAvgMicros = nanosPerOperationMicros(netChunkZlibNanosTotal, stats.netChunkZlibPackets);
+        stats.regionWriteZstdAvgMicros = nanosPerOperationMicros(regionWriteZstdNanosTotal, stats.regionWriteZstd);
+        stats.regionWriteZlibAvgMicros = nanosPerOperationMicros(regionWriteZlibNanosTotal, stats.regionWriteZlib);
 
         return stats;
     }
@@ -1949,6 +2091,17 @@ public class ServerProfiler {
         public int activeHandlersMax;
         public int chunkCompressionQueueMax;
         public int chunkCompressionQueueCapacity;
+        public long netChunkZstdPackets;
+        public long netChunkZlibPackets;
+        public long netChunkZstdFallbacks;
+        public long netChunkCompressionFailures;
+        public long netChunkZstdCompressNanos;
+        public long netChunkZlibCompressNanos;
+        public long regionWriteZstd;
+        public long regionWriteZlib;
+        public long regionWriteZstdFallbacks;
+        public long regionWriteZstdNanos;
+        public long regionWriteZlibNanos;
         public int queueSampleCount;
 
         public int schedulerSamples;
@@ -2016,6 +2169,17 @@ public class ServerProfiler {
             this.activeHandlersMax = other.activeHandlersMax;
             this.chunkCompressionQueueMax = other.chunkCompressionQueueMax;
             this.chunkCompressionQueueCapacity = other.chunkCompressionQueueCapacity;
+            this.netChunkZstdPackets = other.netChunkZstdPackets;
+            this.netChunkZlibPackets = other.netChunkZlibPackets;
+            this.netChunkZstdFallbacks = other.netChunkZstdFallbacks;
+            this.netChunkCompressionFailures = other.netChunkCompressionFailures;
+            this.netChunkZstdCompressNanos = other.netChunkZstdCompressNanos;
+            this.netChunkZlibCompressNanos = other.netChunkZlibCompressNanos;
+            this.regionWriteZstd = other.regionWriteZstd;
+            this.regionWriteZlib = other.regionWriteZlib;
+            this.regionWriteZstdFallbacks = other.regionWriteZstdFallbacks;
+            this.regionWriteZstdNanos = other.regionWriteZstdNanos;
+            this.regionWriteZlibNanos = other.regionWriteZlibNanos;
             this.queueSampleCount = other.queueSampleCount;
             this.schedulerSamples = other.schedulerSamples;
             this.schedulerMovedToSyncedTotal = other.schedulerMovedToSyncedTotal;
@@ -2122,6 +2286,17 @@ public class ServerProfiler {
         public int activeHandlersMax;
         public int chunkCompressionMax;
         public int chunkCompressionCapacity;
+        public long netChunkZstdPackets;
+        public long netChunkZlibPackets;
+        public long netChunkZstdFallbacks;
+        public long netChunkCompressionFailures;
+        public double netChunkZstdAvgMicros;
+        public double netChunkZlibAvgMicros;
+        public long regionWriteZstd;
+        public long regionWriteZlib;
+        public long regionWriteZstdFallbacks;
+        public double regionWriteZstdAvgMicros;
+        public double regionWriteZlibAvgMicros;
         public long movementCoalescedPackets;
         public long movementDroppedPackets;
         public long entityTrackingSkippedNear;

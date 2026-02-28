@@ -279,6 +279,7 @@ public abstract class Packet {
         a(131, true, true, Packet131.class); // Made bidirectional for map lock requests
         a(200, true, false, Packet200Statistic.class);
         a(201, true, false, Packet201PlayerInfo.class);
+        a(202, true, false, Packet202MapChunkZstd.class);
         a(203, true, true, Packet203TabComplete.class); // Tab completion request/response
         a(250, true, true, Packet250CustomPayload.class); // Custom payload for plugin channels
         a(255, true, true, Packet255KickDisconnect.class);

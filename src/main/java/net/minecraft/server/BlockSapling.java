@@ -1,5 +1,7 @@
 package net.minecraft.server;
 
+import net.minecraft.server.Alpha.AlphaWorldGenBigTree;
+import net.minecraft.server.Alpha.AlphaWorldGenTrees;
 import org.bukkit.BlockChangeDelegate;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.material.MaterialData;
@@ -20,7 +22,20 @@ public class BlockSapling extends BlockFlower {
     public void a(World world, int i, int j, int k, Random random) {
         if (!world.isStatic) {
             super.a(world, i, j, k, random);
-            if (world.getLightLevel(i, j + 1, k) >= 9 && random.nextInt(30) == 0) {
+
+            if (this.isAlphaTerrainWorld(world)) {
+                if (world.getLightLevel(i, j + 1, k) >= 9 && random.nextInt(5) == 0) {
+                    int l = world.getData(i, j, k);
+                    int species = l & 3;
+                    int stage = l & 12;
+
+                    if (stage < 12) {
+                        world.setData(i, j, k, species | (stage + 4));
+                    } else {
+                        this.b(world, i, j, k, random);
+                    }
+                }
+            } else if (world.getLightLevel(i, j + 1, k) >= 9 && random.nextInt(30) == 0) {
                 int l = world.getData(i, j, k);
 
                 if ((l & 8) == 0) {
@@ -32,6 +47,10 @@ public class BlockSapling extends BlockFlower {
         }
     }
 
+    private boolean isAlphaTerrainWorld(World world) {
+        return world != null && world.worldData != null && (world.worldData.getTerrainType() == 1 || world.worldData.getTerrainType() == 5);
+    }
+
     public int a(int i, int j) {
         j &= 3;
         return j == 1 ? 63 : (j == 2 ? 79 : super.a(i, j));
@@ -40,6 +59,26 @@ public class BlockSapling extends BlockFlower {
     public void b(World world, int i, int j, int k, Random random) {
         int l = world.getData(i, j, k) & 3;
 
+        if (this.isAlphaTerrainWorld(world)) {
+            world.setRawTypeId(i, j, k, 0);
+            boolean grownTree;
+            if (l == 1) {
+                grownTree = new WorldGenTaiga2().a(world, random, i, j, k);
+            } else if (l == 2) {
+                grownTree = new WorldGenForest().a(world, random, i, j, k);
+            } else {
+                grownTree = random.nextInt(10) == 0
+                        ? new AlphaWorldGenBigTree().a(world, random, i, j, k)
+                        : new AlphaWorldGenTrees().a(world, random, i, j, k);
+            }
+
+            if (!grownTree) {
+                world.setRawTypeIdAndData(i, j, k, this.id, l);
+            }
+
+            return;
+        }
+
         world.setRawTypeId(i, j, k, 0);
 
         // CraftBukkit start - fixes client updates on recently grown trees
@@ -47,9 +86,9 @@ public class BlockSapling extends BlockFlower {
         BlockChangeWithNotify delegate = new BlockChangeWithNotify(world, i, j, k);
 
         // uberbukkit
-        if (l == 1 && UberbukkitConfig.getInstance().getBoolean("worldgen.biomes.generate_spruces", true)) {
+        if (l == 1) {
             grownTree = new WorldGenTaiga2().generate(delegate, random, i, j, k);
-        } else if (l == 2 && UberbukkitConfig.getInstance().getBoolean("worldgen.biomes.generate_birches", true)) {
+        } else if (l == 2) {
             grownTree = new WorldGenForest().generate(delegate, random, i, j, k);
         } else {
             if (random.nextInt(10) == 0) {

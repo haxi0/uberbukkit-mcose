@@ -37,6 +37,7 @@ dependencies {
     implementation("com.google.guava:guava:32.0.1-jre")
     implementation("org.apache.commons:commons-lang3:3.12.0")
     implementation("com.google.code.gson:gson:2.9.0")
+    implementation("com.github.luben:zstd-jni:1.5.7-7")
 }
 
 // For exposing statics to Java, see BuildParameters.java.peb inside the main/java-templates dir

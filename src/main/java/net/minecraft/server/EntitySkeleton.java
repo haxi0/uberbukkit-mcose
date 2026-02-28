@@ -9,6 +9,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 public class EntitySkeleton extends EntityMonster {
 
     private static final ItemStack a = new ItemStack(Item.BOW, 1);
+    private boolean lastSentHostileState = false;
 
     public EntitySkeleton(World world) {
         super(world);
@@ -44,6 +45,13 @@ public class EntitySkeleton extends EntityMonster {
         }
 
         super.v();
+        if (!this.world.isStatic) {
+            boolean hostile = this.target != null && this.target.T();
+            if (hostile != this.lastSentHostileState) {
+                this.world.a(this, (byte) (hostile ? 14 : 15)); // Custom statuses: skeleton hostile on/off
+                this.lastSentHostileState = hostile;
+            }
+        }
     }
 
     protected void a(Entity entity, float f) {
@@ -68,6 +76,7 @@ public class EntitySkeleton extends EntityMonster {
 
                 entityarrow.a(d0, d2 + (double) f1, d1, 0.6F, 12.0F);
                 this.world.addEntity(entityarrow);
+                this.world.a(this, (byte) 11); // Custom status: skeleton fired bow (client firing pose)
                 this.attackTicks = 30;
             }
 

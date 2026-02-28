@@ -67,6 +67,11 @@ public class BlockFire extends Block {
     }
 
     public void a(World world, int i, int j, int k, Random random) {
+        if (world.worldData != null && !world.worldData.getDoFireTick()) {
+            world.c(i, j, k, this.id, this.c());
+            return;
+        }
+
         boolean flag = world.getTypeId(i, j - 1, k) == Block.NETHERRACK.id;
         boolean oldFire = UberbukkitConfig.getInstance().getBoolean("mechanics.pre_1_6_fire", false);
 

@@ -14,11 +14,13 @@ public final class ScheduleRegistryBootstrap {
         if (initialized) return;
         initialized = true;
 
-        // Hostile overworld mobs: active at night
+        // Hostile overworld mobs:
+        // Creepers/skeletons/zombies should remain combat-active during daytime if alive,
+        // while spiders keep their day-passive behavior.
         reg("spider", Schedule.nightOnly());
-        reg("zombie", Schedule.nightOnly());
-        reg("skeleton", Schedule.nightOnly());
-        reg("creeper", Schedule.nightOnly());
+        reg("zombie", Schedule.always());
+        reg("skeleton", Schedule.always());
+        reg("creeper", Schedule.always());
         reg("enderman", Schedule.nightOnly());
 
         // Passive animals: active during day
@@ -58,4 +60,3 @@ public final class ScheduleRegistryBootstrap {
         } catch (Throwable ignored) { return true; }
     }
 }
-

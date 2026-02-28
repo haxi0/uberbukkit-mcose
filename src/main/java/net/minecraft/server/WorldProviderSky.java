@@ -34,21 +34,21 @@ public class WorldProviderSky extends WorldProvider {
      * Client equivalent was func_4096_a
      */
     public Vec3D getSkyColor(float celestialAngle, float partialTickTime) {
-        int baseColor = 8421536;
-        float cosAngleFactor = MathHelper.cos(celestialAngle * (float)Math.PI * 2.0F) * 2.0F + 0.5F;
+        int baseColor = 8961023;
+        float brightness = MathHelper.cos(celestialAngle * (float) Math.PI * 2.0F) * 2.0F + 0.5F;
 
-        if(cosAngleFactor < 0.0F) cosAngleFactor = 0.0F;
-        if(cosAngleFactor > 1.0F) cosAngleFactor = 1.0F;
+        if (brightness < 0.0F) brightness = 0.0F;
+        if (brightness > 1.0F) brightness = 1.0F;
 
-        float r = (float)(baseColor >> 16 & 255) / 255.0F;
-        float g = (float)(baseColor >> 8 & 255) / 255.0F;
-        float bVal = (float)(baseColor & 255) / 255.0F;
-        
-        r *= cosAngleFactor * 0.94F + 0.06F;
-        g *= cosAngleFactor * 0.94F + 0.06F;
-        bVal *= cosAngleFactor * 0.91F + 0.09F;
-        
-        return Vec3D.a((double)r, (double)g, (double)bVal);
+        float r = (float) (baseColor >> 16 & 255) / 255.0F;
+        float g = (float) (baseColor >> 8 & 255) / 255.0F;
+        float bVal = (float) (baseColor & 255) / 255.0F;
+
+        r *= brightness;
+        g *= brightness;
+        bVal *= brightness;
+
+        return Vec3D.a((double) r, (double) g, (double) bVal);
     }
 
     /**

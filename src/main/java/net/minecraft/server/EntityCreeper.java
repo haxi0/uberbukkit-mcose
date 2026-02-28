@@ -38,6 +38,9 @@ public class EntityCreeper extends EntityMonster {
     protected void b(Entity entity, float f) {
         if (!this.world.isStatic) {
             if (this.fuseTicks > 0) {
+                if (this.x() > 0) {
+                    this.world.a(this, (byte) 13); // Custom status: creeper fuse cancelled
+                }
                 this.e(-1);
                 --this.fuseTicks;
                 if (this.fuseTicks < 0) {
@@ -99,6 +102,9 @@ public class EntityCreeper extends EntityMonster {
             int i = this.x();
 
             if ((i > 0 || f >= 3.0F) && (i <= 0 || f >= 7.0F)) {
+                if (i > 0) {
+                    this.world.a(this, (byte) 13); // Custom status: creeper fuse cancelled
+                }
                 this.e(-1);
                 --this.fuseTicks;
                 if (this.fuseTicks < 0) {
@@ -107,6 +113,7 @@ public class EntityCreeper extends EntityMonster {
             } else {
                 if (this.fuseTicks == 0) {
                     this.world.makeSound(this, "random.fuse", 1.0F, 0.5F);
+                    this.world.a(this, (byte) 12); // Custom status: creeper fuse started
                 }
 
                 this.e(1);

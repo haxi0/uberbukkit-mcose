@@ -13,6 +13,9 @@ public abstract class NetHandler {
     public void a(Packet51MapChunk packet51mapchunk) {
     }
 
+    public void a(Packet202MapChunkZstd packet202mapchunkzstd) {
+    }
+
     public void a(Packet packet) {
     }
 

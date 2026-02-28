@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # UberBukkit macOS Build Script
 # Compiles the server and copies the JAR to the server directory
 #
 
-set -e  # Exit on error
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -12,12 +12,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Java 17 required for Gradle plugins
-export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home
-
 # Directories
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SERVER_DIR="/Users/eric/Developer/server"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SERVER_DIR="${SERVER_DIR:-$HOME/Developer/server}"
 OUTPUT_JAR="$SCRIPT_DIR/build/libs/uberbukkit-2.0.2.jar"
 
 echo -e "${GREEN}========================================${NC}"
@@ -30,6 +27,39 @@ if [ ! -f "$SCRIPT_DIR/gradlew" ]; then
     echo -e "${RED}Error: gradlew not found in $SCRIPT_DIR${NC}"
     exit 1
 fi
+
+# Resolve JAVA_HOME (Java 17+) if missing or invalid
+if [ -z "${JAVA_HOME:-}" ] || [ ! -x "${JAVA_HOME}/bin/java" ]; then
+    if command -v /usr/libexec/java_home >/dev/null 2>&1; then
+        DETECTED_JAVA_HOME="$(/usr/libexec/java_home -v 17+ 2>/dev/null || true)"
+        if [ -n "$DETECTED_JAVA_HOME" ] && [ -x "$DETECTED_JAVA_HOME/bin/java" ]; then
+            export JAVA_HOME="$DETECTED_JAVA_HOME"
+        fi
+    fi
+fi
+
+if [ -z "${JAVA_HOME:-}" ] || [ ! -x "${JAVA_HOME}/bin/java" ]; then
+    echo -e "${RED}Error: Java 17+ not found.${NC}"
+    echo "Install a JDK and/or set JAVA_HOME to a valid JDK home."
+    echo "Example: export JAVA_HOME=\"$(/usr/libexec/java_home -v 17 2>/dev/null || echo /path/to/jdk17)\""
+    exit 1
+fi
+
+JAVA_VERSION_LINE="$("$JAVA_HOME/bin/java" -version 2>&1 | head -n1)"
+JAVA_MAJOR="$(echo "$JAVA_VERSION_LINE" | sed -E 's/.*version "(1\.)?([0-9]+).*/\2/')"
+
+if ! [[ "$JAVA_MAJOR" =~ ^[0-9]+$ ]]; then
+    echo -e "${RED}Error: Could not parse Java version from: $JAVA_VERSION_LINE${NC}"
+    exit 1
+fi
+
+if [ "$JAVA_MAJOR" -lt 17 ]; then
+    echo -e "${RED}Error: Java 17+ required (found: $JAVA_VERSION_LINE)${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}Using JAVA_HOME: $JAVA_HOME${NC}"
+echo -e "${YELLOW}Using Java: $JAVA_VERSION_LINE${NC}"
 
 # Make gradlew executable
 chmod +x "$SCRIPT_DIR/gradlew"

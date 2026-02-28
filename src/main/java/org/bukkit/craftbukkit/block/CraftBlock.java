@@ -208,6 +208,12 @@ public class CraftBlock implements Block {
     public BlockState getState() {
         Material material = getType();
 
+        // Some custom/legacy block IDs may not have a Bukkit Material mapping.
+        // Avoid NPEs during rollbacks/listener access by falling back to a generic state.
+        if (material == null) {
+            return new CraftBlockState(this);
+        }
+
         switch (material) {
             case SIGN:
             case SIGN_POST:

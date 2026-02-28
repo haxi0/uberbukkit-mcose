@@ -283,9 +283,9 @@ public class Explosion {
                 block.dropNaturally(this.world, j, k, l, this.world.getData(j, k, l), event.getYield());
                 this.world.setTypeId(j, k, l, 0);
 
-                // Preserve TNT ownership through chain reactions so plugins can attribute logs correctly.
+                // Preserve TNT ownership through chain reactions while keeping vanilla TNT chain timing.
                 if (i1 == Block.TNT.id && block instanceof BlockTNT) {
-                    ((BlockTNT) block).postBreak(this.world, j, k, l, 1, resolveTntIgniter(), resolveTntIgniterName());
+                    ((BlockTNT) block).primeByExplosion(this.world, j, k, l, resolveTntIgniter(), resolveTntIgniterName());
                 } else {
                     block.d(this.world, j, k, l);
                 }

@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Locale;
+import com.github.luben.zstd.ZstdInputStream;
+
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
@@ -15,6 +17,9 @@ import java.util.zip.InflaterInputStream;
 public class RegionFile {
 
     private static final byte[] a = new byte[4096];
+    private static final byte REGION_CODEC_GZIP = 1;
+    private static final byte REGION_CODEC_ZLIB = 2;
+    private static final byte REGION_CODEC_ZSTD = 3;
     private static final int WAL_LOG_LEVEL = getWalLogLevel();
     private static final boolean WAL_STRICT_SYNC = isStrictWalMode();
     private static final int WAL_SYNC_BATCH = getWalSyncBatch();
@@ -124,7 +129,7 @@ public class RegionFile {
                         RegionFileWAL.PendingEntry regionfilewal_pendingentry = (RegionFileWAL.PendingEntry) arraylist.get(i);
 
                         this.a("WAL", regionfilewal_pendingentry.chunkX, regionfilewal_pendingentry.chunkZ, regionfilewal_pendingentry.length, "replay");
-                        this.writeChunk(regionfilewal_pendingentry.chunkX, regionfilewal_pendingentry.chunkZ, regionfilewal_pendingentry.data, regionfilewal_pendingentry.length);
+                        this.writeChunk(regionfilewal_pendingentry.chunkX, regionfilewal_pendingentry.chunkZ, regionfilewal_pendingentry.data, regionfilewal_pendingentry.length, regionfilewal_pendingentry.codec);
                     }
 
                     this.c.getFD().sync();
@@ -194,15 +199,20 @@ public class RegionFile {
                             byte[] abyte;
                             DataInputStream datainputstream;
 
-                            if (b0 == 1) {
+                            if (b0 == REGION_CODEC_GZIP) {
                                 abyte = new byte[j1 - 1];
                                 this.c.read(abyte);
                                 datainputstream = new DataInputStream(new GZIPInputStream(new ByteArrayInputStream(abyte)));
                                 return datainputstream;
-                            } else if (b0 == 2) {
+                            } else if (b0 == REGION_CODEC_ZLIB) {
                                 abyte = new byte[j1 - 1];
                                 this.c.read(abyte);
                                 datainputstream = new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(abyte)));
+                                return datainputstream;
+                            } else if (b0 == REGION_CODEC_ZSTD) {
+                                abyte = new byte[j1 - 1];
+                                this.c.read(abyte);
+                                datainputstream = new DataInputStream(new ZstdInputStream(new ByteArrayInputStream(abyte)));
                                 return datainputstream;
                             } else {
                                 this.b("READ", i, j, "unknown version " + b0);
@@ -219,10 +229,23 @@ public class RegionFile {
     }
 
     public DataOutputStream b(int i, int j) {
-        return this.d(i, j) ? null : new DataOutputStream(new DeflaterOutputStream(new ChunkBuffer(this, i, j)));
+        if (this.d(i, j)) {
+            return null;
+        }
+
+        byte codec = ZstdRuntime.isAvailable() ? REGION_CODEC_ZSTD : REGION_CODEC_ZLIB;
+        ChunkBuffer chunkBuffer = new ChunkBuffer(this, i, j, codec);
+        if (codec == REGION_CODEC_ZSTD) {
+            return new DataOutputStream(chunkBuffer);
+        }
+        return new DataOutputStream(new DeflaterOutputStream(chunkBuffer));
     }
 
     protected synchronized void a(int i, int j, byte[] abyte, int k) {
+        this.a(i, j, abyte, k, REGION_CODEC_ZLIB);
+    }
+
+    protected synchronized void a(int i, int j, byte[] abyte, int k, byte codec) {
         try {
             if (this.writeAheadLog != null) {
                 this.logWal(2, "begin " + this.b.getName() + " chunk [" + i + "," + j + "] bytes=" + k);
@@ -231,10 +254,10 @@ public class RegionFile {
                     this.walFirstWriteLogged = true;
                 }
 
-                this.writeAheadLog.appendPendingWrite(i, j, abyte, k, WAL_STRICT_SYNC);
+                this.writeAheadLog.appendPendingWrite(i, j, abyte, k, codec, WAL_STRICT_SYNC);
             }
 
-            this.writeChunk(i, j, abyte, k);
+            this.writeChunk(i, j, abyte, k, codec);
             if (this.writeAheadLog != null) {
                 ++this.walPendingWrites;
                 ++this.walCommittedWrites;
@@ -265,7 +288,7 @@ public class RegionFile {
         }
     }
 
-    private void writeChunk(int i, int j, byte[] abyte, int k) throws IOException {
+    private void writeChunk(int i, int j, byte[] abyte, int k, byte codec) throws IOException {
         int l = this.e(i, j);
         int i1 = l >> 8;
         int j1 = l & 255;
@@ -274,7 +297,7 @@ public class RegionFile {
         if (k1 < 256) {
             if (i1 != 0 && j1 == k1) {
                 this.a("SAVE", i, j, k, "rewrite");
-                this.writeSector(i1, abyte, k);
+                this.writeSector(i1, abyte, k, codec);
             } else {
                 int l1;
 
@@ -314,7 +337,7 @@ public class RegionFile {
                         this.f.set(i1 + j2, Boolean.valueOf(false));
                     }
 
-                    this.writeSector(i1, abyte, k);
+                    this.writeSector(i1, abyte, k, codec);
                 } else {
                     this.a("SAVE", i, j, k, "grow");
                     this.c.seek(this.c.length());
@@ -326,7 +349,7 @@ public class RegionFile {
                     }
 
                     this.g += 4096 * k1;
-                    this.writeSector(i1, abyte, k);
+                    this.writeSector(i1, abyte, k, codec);
                     this.a(i, j, i1 << 8 | k1);
                 }
             }
@@ -335,11 +358,11 @@ public class RegionFile {
         }
     }
 
-    private void writeSector(int i, byte[] abyte, int j) throws IOException {
+    private void writeSector(int i, byte[] abyte, int j, byte codec) throws IOException {
         this.b(" " + i);
         this.c.seek((long) (i * 4096));
         this.c.writeInt(j + 1);
-        this.c.writeByte(2);
+        this.c.writeByte(codec);
         this.c.write(abyte, 0, j);
     }
 
