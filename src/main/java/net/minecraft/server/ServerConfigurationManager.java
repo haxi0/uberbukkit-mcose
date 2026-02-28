@@ -245,7 +245,8 @@ public class ServerConfigurationManager {
         // Broadcast player join for Tab overlay
         try {
             int initialPing = (entityplayer.netServerHandler != null) ? entityplayer.netServerHandler.b() : 0;
-            Packet201PlayerInfo joinInfo = new Packet201PlayerInfo(entityplayer.name, true, initialPing);
+            String displayName = entityplayer.listName != null ? entityplayer.listName : entityplayer.name;
+            Packet201PlayerInfo joinInfo = new Packet201PlayerInfo(displayName, true, initialPing);
             this.sendAll(joinInfo);
         } catch (Throwable ignore) {}
         
@@ -322,7 +323,8 @@ public class ServerConfigurationManager {
 
         // Broadcast player leave for Tab overlay
         try {
-            Packet201PlayerInfo leaveInfo = new Packet201PlayerInfo(entityplayer.name, false, 0);
+            String displayName = entityplayer.listName != null ? entityplayer.listName : entityplayer.name;
+            Packet201PlayerInfo leaveInfo = new Packet201PlayerInfo(displayName, false, 0);
             this.sendAll(leaveInfo);
         } catch (Throwable ignore) {}
 

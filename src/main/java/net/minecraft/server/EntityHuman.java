@@ -69,6 +69,13 @@ public abstract class EntityHuman extends EntityLiving {
     
     // MCOSE - Wool colors collected for Rainbow Collection achievement (bitmask)
     public int woolColorsCollected = 0;
+    
+    // uberbukkit - Name for the tab list (allows keeping the prefix only there)
+    public String listName;
+
+    public void setListName(String name) {
+        this.listName = name;
+    }
 
     public EntityHuman(World world) {
         super(world);
@@ -1084,7 +1091,7 @@ public abstract class EntityHuman extends EntityLiving {
             this.a(StatisticList.n, (int) Math.round((double) f * 100.0D));
         }
 
-        if (f > 0.5F && !this.world.isStatic) {
+        if (f > 0.75F && !this.world.isStatic) {
             int i = MathHelper.floor(this.locX);
             int j = MathHelper.floor(this.locY - 0.20000000298023224D - (double) this.height);
             int k = MathHelper.floor(this.locZ);
@@ -1097,7 +1104,7 @@ public abstract class EntityHuman extends EntityLiving {
                     }
                 }
 
-                if (this.world.getTypeId(i, j, k) == Block.SOIL.id) {
+                if (this.world.getTypeId(i, j, k) == Block.SOIL.id && uk.betacraft.uberbukkit.UberbukkitConfig.getInstance().getBoolean("mechanics.farmland_trampling", true) && !this.isSneaking()) {
                     // CraftBukkit start - Interact Soil
                     org.bukkit.event.Cancellable cancellable = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(this, org.bukkit.event.block.Action.PHYSICAL, i, j, k, -1, null);
 

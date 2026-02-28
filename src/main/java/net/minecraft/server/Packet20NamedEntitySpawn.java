@@ -20,6 +20,7 @@ public class Packet20NamedEntitySpawn extends Packet {
 
     public Packet20NamedEntitySpawn(EntityHuman entityhuman) {
         this.a = entityhuman.id;
+        // MCOSE - Use uncolored name for skin lookup compatibility
         this.b = entityhuman.name;
         this.c = MathHelper.floor(entityhuman.locX * 32.0D);
         this.d = MathHelper.floor(entityhuman.locY * 32.0D);

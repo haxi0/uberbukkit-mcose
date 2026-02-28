@@ -660,6 +660,7 @@ public class ChunkProviderSky implements IChunkProvider {
             }
         }
 
+        SpawnerCreature.a(this.p, biomebase, k + 8, l + 8, 16, 16, this.j);
         BlockSand.instaFall = false;
     }
 

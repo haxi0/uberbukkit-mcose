@@ -127,6 +127,8 @@ public class UberbukkitConfig extends Configuration {
         writeDefault("mechanics.beds_set_spawnpoint", true);
         writeDefault("mechanics.pre_b1_5_block_placement_rules", false);
         writeDefault("mechanics.trample_farmland_above_fence", false);
+        writeDefault("mechanics.farmland_trampling", true);
+        writeDefault("mechanics.modern_farmland", true);
         writeDefault("mechanics.seeds_replace_blocks", false);
         writeDefault("mechanics.boats.drop_boat_not_wood", false);
         writeDefault("mechanics.boats.break_boat_on_collision", true);

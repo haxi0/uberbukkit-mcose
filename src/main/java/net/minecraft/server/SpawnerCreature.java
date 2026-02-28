@@ -5,6 +5,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 
 // CraftBukkit
@@ -170,6 +171,77 @@ public final class SpawnerCreature {
             entityskeleton.mount(entityliving);
         } else if (entityliving instanceof EntitySheep) {
             ((EntitySheep) entityliving).setColor(EntitySheep.a(world.random));
+        }
+    }
+
+    public static void a(World world, BiomeBase biomebase, int i, int j, int k, int l, Random random) {
+        List list = biomebase.a(EnumCreatureType.CREATURE);
+
+        if (list != null && !list.isEmpty()) {
+            while (random.nextFloat() < 0.1F) {
+                int k1 = 0;
+
+                BiomeMeta biomemeta;
+
+                for (Iterator iterator1 = list.iterator(); iterator1.hasNext(); k1 += biomemeta.b) {
+                    biomemeta = (BiomeMeta) iterator1.next();
+                }
+
+                int l1 = random.nextInt(k1);
+
+                biomemeta = (BiomeMeta) list.get(0);
+                Iterator iterator2 = list.iterator();
+
+                while (iterator2.hasNext()) {
+                    BiomeMeta biomemeta1 = (BiomeMeta) iterator2.next();
+
+                    l1 -= biomemeta1.b;
+                    if (l1 < 0) {
+                        biomemeta = biomemeta1;
+                        break;
+                    }
+                }
+
+                int i1 = 4;
+                int j1 = i + random.nextInt(k);
+                int k1_pos = j + random.nextInt(l);
+                int l1_orig = j1;
+                int i2 = k1_pos;
+
+                for (int j2 = 0; j2 < i1; ++j2) {
+                    boolean flag = false;
+
+                    for (int k2 = 0; !flag && k2 < 4; ++k2) {
+                        int l2 = world.getHighestBlockYAt(j1, k1_pos);
+
+                        if (a(EnumCreatureType.CREATURE, world, j1, l2, k1_pos)) {
+                            float f = (float) j1 + 0.5F;
+                            float f1 = (float) l2;
+                            float f2 = (float) k1_pos + 0.5F;
+
+                            EntityLiving entityliving;
+
+                            try {
+                                entityliving = (EntityLiving) biomemeta.a.getConstructor(new Class[] { World.class }).newInstance(new Object[] { world });
+                            } catch (Exception exception) {
+                                exception.printStackTrace();
+                                continue;
+                            }
+
+                            entityliving.setPositionRotation((double) f, (double) f1, (double) f2, random.nextFloat() * 360.0F, 0.0F);
+                            world.addEntity(entityliving, SpawnReason.NATURAL);
+                            a(entityliving, world, f, f1, f2);
+                            flag = true;
+                        }
+
+                        j1 += random.nextInt(5) - random.nextInt(5);
+
+                        for (k1_pos += random.nextInt(5) - random.nextInt(5); j1 < i || j1 >= i + k || k1_pos < j || k1_pos >= j + l; k1_pos = i2 + random.nextInt(5) - random.nextInt(5)) {
+                            j1 = l1_orig + random.nextInt(5) - random.nextInt(5);
+                        }
+                    }
+                }
+            }
         }
     }
 

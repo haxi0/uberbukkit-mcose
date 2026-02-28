@@ -42,7 +42,23 @@ public class BlockSoil extends Block {
                 if (l > 0) {
                     world.setData(i, j, k, l - 1);
                 } else if (!this.g(world, i, j, k)) {
-                    world.setTypeId(i, j, k, Block.DIRT.id);
+                    // Modern Farmland: Don't revert if modern_farmland is enabled
+                    if (!uk.betacraft.uberbukkit.UberbukkitConfig.getInstance().getBoolean("mechanics.modern_farmland", true)) {
+                         world.setTypeId(i, j, k, Block.DIRT.id);
+                    } else {
+                        // Force client resync even on random tick to prevent local prediction bugs
+                        for (Object obj : world.players) {
+                            if (obj instanceof EntityPlayer) {
+                                EntityPlayer ep = (EntityPlayer) obj;
+                                double dx = ep.locX - i;
+                                double dy = ep.locY - j;
+                                double dz = ep.locZ - k;
+                                if (dx * dx + dy * dy + dz * dz < 1024) { // 32 blocks away
+                                    ep.netServerHandler.sendPacket(new Packet53BlockChange(i, j, k, world));
+                                }
+                            }
+                        }
+                    }
                 }
             } else {
                 world.setData(i, j, k, 7);
@@ -51,6 +67,12 @@ public class BlockSoil extends Block {
     }
 
     public void b(World world, int i, int j, int k, Entity entity) {
+        if (entity instanceof EntityPlayer) {
+            ((EntityPlayer) entity).netServerHandler.sendPacket(new Packet53BlockChange(i, j, k, world));
+            if (world.getTypeId(i, j + 1, k) > 0) {
+                ((EntityPlayer) entity).netServerHandler.sendPacket(new Packet53BlockChange(i, j + 1, k, world));
+            }
+        }
     }
 
     private boolean g(World world, int i, int j, int k) {
@@ -84,10 +106,26 @@ public class BlockSoil extends Block {
 
     public void doPhysics(World world, int i, int j, int k, int l) {
         super.doPhysics(world, i, j, k, l);
-        Material material = world.getMaterial(i, j + 1, k);
+        int blockAboveId = world.getTypeId(i, j + 1, k);
 
-        if (material.isBuildable()) {
-            world.setTypeId(i, j, k, Block.DIRT.id);
+        if (blockAboveId > 0) {
+            boolean shouldRevert = false;
+            if (uk.betacraft.uberbukkit.UberbukkitConfig.getInstance().getBoolean("mechanics.modern_farmland", true)) {
+                // Modern check: only revert if block is opaque
+                if (Block.byId[blockAboveId].a()) {
+                    shouldRevert = true;
+                }
+            } else {
+                // Vanilla legacy check
+                Material material = world.getMaterial(i, j + 1, k);
+                if (material.isBuildable()) {
+                    shouldRevert = true;
+                }
+            }
+
+            if (shouldRevert) {
+                world.setTypeId(i, j, k, Block.DIRT.id);
+            }
         }
     }
 

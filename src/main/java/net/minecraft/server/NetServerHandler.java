@@ -198,7 +198,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.lastTick = MinecraftServer.currentTick;
                 int currentPing = this.b();
                 if (this.player != null) {
-                    Packet201PlayerInfo update = new Packet201PlayerInfo(this.player.name, true, currentPing);
+                    String displayName = this.player.listName != null ? this.player.listName : this.player.name;
+                    Packet201PlayerInfo update = new Packet201PlayerInfo(displayName, true, currentPing);
                     this.minecraftServer.serverConfigurationManager.sendAll(update);
                 }
             }

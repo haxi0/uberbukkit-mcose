@@ -1,0 +1,22 @@
+Calculating task graph as no cached configuration is available for tasks: build
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Could not resolve all dependencies for configuration ':buildSrc:buildScriptClasspath'.
+> Could not resolve project :buildSrc.
+  Required by:
+      project :buildSrc
+   > Failed to calculate the value of task ':buildSrc:compileJava' property 'javaCompiler'.
+      > Cannot find a Java installation on your machine (Linux 6.18.9-arch1-2 amd64) matching: {languageVersion=8, vendor=any vendor, implementation=vendor-specific, nativeImageCapable=false}. Toolchain download repositories have not been configured.
+
+* Try:
+> Learn more about toolchain auto-detection and auto-provisioning at https://docs.gradle.org/8.14/userguide/toolchains.html#sec:auto_detection.
+> Learn more about toolchain repositories at https://docs.gradle.org/8.14/userguide/toolchains.html#sub:download_repositories.
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 897ms
+Configuration cache entry stored.
