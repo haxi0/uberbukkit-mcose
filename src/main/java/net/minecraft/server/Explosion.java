@@ -274,12 +274,48 @@ public class Explosion {
 
             // CraftBukkit - stop explosions from putting out fire
             if (i1 > 0 && i1 != Block.FIRE.id) {
+                Block block = Block.byId[i1];
+                if (block == null) {
+                    continue;
+                }
+
                 // CraftBukkit
-                Block.byId[i1].dropNaturally(this.world, j, k, l, this.world.getData(j, k, l), event.getYield());
+                block.dropNaturally(this.world, j, k, l, this.world.getData(j, k, l), event.getYield());
                 this.world.setTypeId(j, k, l, 0);
-                Block.byId[i1].d(this.world, j, k, l);
+
+                // Preserve TNT ownership through chain reactions so plugins can attribute logs correctly.
+                if (i1 == Block.TNT.id && block instanceof BlockTNT) {
+                    ((BlockTNT) block).postBreak(this.world, j, k, l, 1, resolveTntIgniter(), resolveTntIgniterName());
+                } else {
+                    block.d(this.world, j, k, l);
+                }
             }
         }
+    }
+
+    private EntityLiving resolveTntIgniter() {
+        if (this.source instanceof EntityTNTPrimed) {
+            return ((EntityTNTPrimed) this.source).source;
+        }
+        if (this.source instanceof EntityLiving) {
+            return (EntityLiving) this.source;
+        }
+        return null;
+    }
+
+    private String resolveTntIgniterName() {
+        if (this.source instanceof EntityTNTPrimed) {
+            EntityTNTPrimed tnt = (EntityTNTPrimed) this.source;
+            String fromLiving = BlockTNT.sourceNameFromLiving(tnt.source);
+            if (fromLiving != null) {
+                return fromLiving;
+            }
+            return tnt.sourceName;
+        }
+        if (this.source instanceof EntityLiving) {
+            return BlockTNT.sourceNameFromLiving((EntityLiving) this.source);
+        }
+        return null;
     }
 
     // Paper start - Optimize explosions

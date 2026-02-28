@@ -1,6 +1,8 @@
 package net.minecraft.server;
 
 import org.bukkit.BlockChangeDelegate;
+import org.bukkit.event.block.BlockSpreadEvent;
+import org.bukkit.material.MaterialData;
 
 import uk.betacraft.uberbukkit.UberbukkitConfig;
 
@@ -42,7 +44,7 @@ public class BlockSapling extends BlockFlower {
 
         // CraftBukkit start - fixes client updates on recently grown trees
         boolean grownTree;
-        BlockChangeWithNotify delegate = new BlockChangeWithNotify(world);
+        BlockChangeWithNotify delegate = new BlockChangeWithNotify(world, i, j, k);
 
         // uberbukkit
         if (l == 1 && UberbukkitConfig.getInstance().getBoolean("worldgen.biomes.generate_spruces", true)) {
@@ -74,22 +76,56 @@ public class BlockSapling extends BlockFlower {
 
     // CraftBukkit start
     private class BlockChangeWithNotify implements BlockChangeDelegate {
-        World world;
+        private final World world;
+        private final int sourceX;
+        private final int sourceY;
+        private final int sourceZ;
 
-        BlockChangeWithNotify(World world) {
+        BlockChangeWithNotify(World world, int sourceX, int sourceY, int sourceZ) {
             this.world = world;
+            this.sourceX = sourceX;
+            this.sourceY = sourceY;
+            this.sourceZ = sourceZ;
         }
 
         public boolean setRawTypeId(int x, int y, int z, int type) {
-            return this.world.setTypeId(x, y, z, type);
+            return this.applyGrowthBlock(x, y, z, type, 0, false);
         }
 
         public boolean setRawTypeIdAndData(int x, int y, int z, int type, int data) {
-            return this.world.setTypeIdAndData(x, y, z, type, data);
+            return this.applyGrowthBlock(x, y, z, type, data, true);
         }
 
         public int getTypeId(int x, int y, int z) {
             return this.world.getTypeId(x, y, z);
+        }
+
+        private boolean applyGrowthBlock(int x, int y, int z, int type, int data, boolean hasData) {
+            if (type == 0) {
+                if (hasData) {
+                    return this.world.setTypeIdAndData(x, y, z, type, data);
+                }
+                return this.world.setTypeId(x, y, z, type);
+            }
+
+            if (this.world.getTypeId(x, y, z) == type && (!hasData || this.world.getData(x, y, z) == data)) {
+                return true;
+            }
+
+            org.bukkit.World bukkitWorld = this.world.getWorld();
+            org.bukkit.block.Block block = bukkitWorld.getBlockAt(x, y, z);
+            org.bukkit.block.BlockState blockState = block.getState();
+            blockState.setTypeId(type);
+            blockState.setData(new MaterialData(type, (byte) (hasData ? data : 0)));
+
+            BlockSpreadEvent event = new BlockSpreadEvent(blockState.getBlock(), bukkitWorld.getBlockAt(this.sourceX, this.sourceY, this.sourceZ), blockState);
+            this.world.getServer().getPluginManager().callEvent(event);
+
+            if (event.isCancelled()) {
+                return false;
+            }
+
+            return blockState.update(true);
         }
     }
     // CraftBukkit end

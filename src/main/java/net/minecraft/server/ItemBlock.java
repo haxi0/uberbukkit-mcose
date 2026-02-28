@@ -116,6 +116,10 @@ public class ItemBlock extends Item {
                     Block.byId[this.id].postPlace(world, i, j, k, entityhuman);
                 }
 
+                if (this.id == Block.TNT.id) {
+                    BlockTNT.recordPlacedBy(world, i, j, k, entityhuman);
+                }
+
                 world.makeSound(entityhuman, (double) ((float) i + 0.5F), (double) ((float) j + 0.5F), (double) ((float) k + 0.5F), block.stepSound.getName(), (block.stepSound.getVolume1() + 1.0F) / 2.0F, block.stepSound.getVolume2() * 0.8F);
                 --itemstack.count;
             }

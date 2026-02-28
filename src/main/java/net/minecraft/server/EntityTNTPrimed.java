@@ -14,6 +14,7 @@ public class EntityTNTPrimed extends Entity {
     public float yield = 4; // CraftBukkit
     public boolean isIncendiary = false; // CraftBukkit
     public EntityLiving source; // UberBukkit - Track who ignited this TNT
+    public String sourceName; // UberBukkit - Track igniter name when no live Entity source is available
 
     public EntityTNTPrimed(World world) {
         super(world);
