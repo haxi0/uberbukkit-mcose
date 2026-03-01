@@ -59,6 +59,8 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private int f;
     private int g;
     private int h;
+    private long lastKeepAliveTime = 0L;
+    private int lastPing = 0;
     private boolean i;
     private double x;
     private double y;
@@ -98,6 +100,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private final String msgPlayerLeave;
     private static final long INVENTORY_SHORTCUT_PRIME_MS = 350L;
     private int primedInventorySlot = -1;
+    private String lastSentListName;
     private int primedInventoryWindowId = -1;
     private long primedInventoryClickAt = 0L;
 
@@ -189,6 +192,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         this.networkManager.b();
 
         if (this.f - this.g > 20) {
+            this.lastKeepAliveTime = System.currentTimeMillis();
             this.sendPacket(new Packet0KeepAlive());
         }
 
@@ -199,8 +203,15 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 int currentPing = this.b();
                 if (this.player != null) {
                     String displayName = this.player.listName != null ? this.player.listName : this.player.name;
+                    
+                    // If the name changed, remove the old one from the tab list
+                    if (this.lastSentListName != null && !this.lastSentListName.equals(displayName)) {
+                        this.minecraftServer.serverConfigurationManager.sendAll(new Packet201PlayerInfo(this.lastSentListName, false, 0));
+                    }
+                    
                     Packet201PlayerInfo update = new Packet201PlayerInfo(displayName, true, currentPing);
                     this.minecraftServer.serverConfigurationManager.sendAll(update);
+                    this.lastSentListName = displayName;
                 }
             }
         } catch (Throwable ignore) {}
@@ -597,6 +608,16 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.player.onGround = packet10flying.g;
             this.minecraftServer.serverConfigurationManager.d(this.player);
             this.player.b(this.player.locY - d0, packet10flying.g);
+
+            // MCOSE - modern crops aggressive resync
+            if (!this.player.dead && UberbukkitConfig.getInstance().getBoolean("mechanics.modern_farmland", true)) {
+                int px = MathHelper.floor(this.player.locX);
+                int py = MathHelper.floor(this.player.locY - 0.1D);
+                int pz = MathHelper.floor(this.player.locZ);
+                if (this.player.world.getTypeId(px, py, pz) == Block.SOIL.id) {
+                    this.sendPacket(new Packet53BlockChange(px, py, pz, this.player.world));
+                }
+            }
         }
     }
 
@@ -1672,6 +1693,10 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet0KeepAlive packet0KeepAlive) {
+        if (this.lastKeepAliveTime > 0) {
+            this.lastPing = (int) (System.currentTimeMillis() - this.lastKeepAliveTime);
+            this.lastKeepAliveTime = 0L;
+        }
         this.receivedKeepAlive = true;
     }
 
@@ -1698,7 +1723,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public int b() {
-        return this.networkManager.e();
+        return this.lastPing;
     }
 
     public int getQueuedPacketCount() {

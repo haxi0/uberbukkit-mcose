@@ -34,6 +34,12 @@ public class BlockSoil extends Block {
         return i == 1 && j > 0 ? this.textureId - 1 : (i == 1 ? this.textureId : 2);
     }
 
+    public void a(World world, int i, int j, int k, Entity entity) {
+        if (entity instanceof EntityPlayer && uk.betacraft.uberbukkit.UberbukkitConfig.getInstance().getBoolean("mechanics.modern_farmland", true)) {
+            ((EntityPlayer) entity).netServerHandler.sendPacket(new Packet53BlockChange(i, j, k, world));
+        }
+    }
+
     public void a(World world, int i, int j, int k, Random random) {
         if (random.nextInt(5) == 0) {
             if (!this.h(world, i, j, k) && !world.s(i, j + 1, k)) {
@@ -67,7 +73,7 @@ public class BlockSoil extends Block {
     }
 
     public void b(World world, int i, int j, int k, Entity entity) {
-        if (entity instanceof EntityPlayer) {
+        if (entity instanceof EntityPlayer && uk.betacraft.uberbukkit.UberbukkitConfig.getInstance().getBoolean("mechanics.modern_farmland", true)) {
             ((EntityPlayer) entity).netServerHandler.sendPacket(new Packet53BlockChange(i, j, k, world));
             if (world.getTypeId(i, j + 1, k) > 0) {
                 ((EntityPlayer) entity).netServerHandler.sendPacket(new Packet53BlockChange(i, j + 1, k, world));

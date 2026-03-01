@@ -104,7 +104,7 @@ public final class CraftServer implements Server {
             }
         }
 
-        return "Project Poseidon UberBukkit";
+        return "haxiCore";
     }
 
     private static String resolveServerVersion() {

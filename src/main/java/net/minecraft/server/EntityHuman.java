@@ -1105,13 +1105,22 @@ public abstract class EntityHuman extends EntityLiving {
                 }
 
                 if (this.world.getTypeId(i, j, k) == Block.SOIL.id && uk.betacraft.uberbukkit.UberbukkitConfig.getInstance().getBoolean("mechanics.farmland_trampling", true) && !this.isSneaking()) {
-                    // CraftBukkit start - Interact Soil
-                    org.bukkit.event.Cancellable cancellable = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(this, org.bukkit.event.block.Action.PHYSICAL, i, j, k, -1, null);
+                    boolean modern = uk.betacraft.uberbukkit.UberbukkitConfig.getInstance().getBoolean("mechanics.modern_farmland", true);
+                    // MCOSE - Don't trample unless jump/fall distance > 0.5 in modern mode
+                    if (!modern || f > 0.5F) {
+                        // CraftBukkit start - Interact Soil
+                        org.bukkit.event.Cancellable cancellable = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(this, org.bukkit.event.block.Action.PHYSICAL, i, j, k, -1, null);
 
-                    if (!cancellable.isCancelled()) {
-                        this.world.setTypeId(i, j, k, Block.DIRT.id);
+                        if (!cancellable.isCancelled()) {
+                            this.world.setTypeId(i, j, k, Block.DIRT.id);
+                        }
+                        // CraftBukkit end
+                    } else if (modern) {
+                        // Resync client to prevent visual prediction glitch
+                        if (this instanceof EntityPlayer) {
+                            ((EntityPlayer) this).netServerHandler.sendPacket(new net.minecraft.server.Packet53BlockChange(i, j, k, this.world));
+                        }
                     }
-                    // CraftBukkit end
                 }
             }
         }

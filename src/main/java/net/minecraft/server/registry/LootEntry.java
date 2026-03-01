@@ -81,6 +81,11 @@ public class LootEntry {
     public ItemStack generateStack(Random random) {
         Item item = Registries.ITEM.get(itemId);
         if (item == null) {
+            // MCOSE: Don't silently fail for missing items as this leads to empty chest reports.
+            // We skip "air" as it's a valid intentional "nothing" entry in many loot tables.
+            if (!itemId.getPath().equals("air")) {
+                System.err.println("[LootEntry] Failed to resolve item: " + itemId + ". Skipping entry.");
+            }
             return null;
         }
         

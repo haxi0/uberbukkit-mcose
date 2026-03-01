@@ -1,13 +1,38 @@
+# Build artifacts
 target/
 build/
+out/
 
-.idea/*
-!.idea/codeStyles/
-
+# IDE files
+.idea/
 *.iml
-dependency-reduced-pom.xml
-.DS_Store
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+.nbsetings/
+*.swp
+*.swo
+*.tmp
 
+# Gradle
+.gradle/
+buildSrc/.gradle/
+gradle.properties
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Runtime/Data
 run/
-/.gradle
-/buildSrc/.gradle
+*.log
+*.dat
+*.txt
+!stats.txt
+!homes.txt
+!mobs.dat
+
+# Maven
+dependency-reduced-pom.xml

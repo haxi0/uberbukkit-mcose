@@ -45,6 +45,7 @@ public final class RegistryKeyPolicy {
         override("yellow_dust", "glowstone_dust");
         override("minecart_chest", "chest_minecart");
         override("minecart_furnace", "furnace_minecart");
+        override("emerald", "diamond");
 
         alias("netherrack", "hellrock");
         alias("glowstone", "lightgem");
@@ -55,7 +56,9 @@ public final class RegistryKeyPolicy {
         alias("cobblestone_stairs", "stairs_stone", "stone_stairs");
         alias("fence_gate", "fencegate");
         alias("chest_minecart", "minecart_chest", "storage_minecart");
-        alias("furnace_minecart", "minecart_furnace", "powered_minecart");
+        alias("sulphur", "gunpowder");
+        alias("seeds", "wheat_seeds", "wheat_seed");
+        alias("reeds", "sugar_cane");
 
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(8), "water");
         BLOCK_ID_OVERRIDES.put(Integer.valueOf(9), "water_still");

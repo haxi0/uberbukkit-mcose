@@ -306,6 +306,9 @@ public final class ItemRegistry {
                     }
                 }
                 registerColorMeta("cocoa_beans", item, 3);
+                registerColorMeta("ink_sac", item, 0);
+                registerColorMeta("lapis_lazuli", item, 4);
+                registerColorMeta("bone_meal", item, 15);
             }
 
             if (item instanceof ItemCloth) {

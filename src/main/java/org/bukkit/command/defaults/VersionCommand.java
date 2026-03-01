@@ -17,7 +17,7 @@ public class VersionCommand extends Command {
         this.description = "Gets the version of this server including any plugins in use";
         this.usageMessage = "/version [plugin name]";
         this.setPermission("bukkit.command.version");
-        this.setAliases(Arrays.asList("ver", "about"));
+        this.setAliases(Arrays.asList("ver"));
     }
 
     @Override
@@ -25,7 +25,7 @@ public class VersionCommand extends Command {
         if (!testPermission(sender)) return true;
 
         if (args.length == 0) {
-            sender.sendMessage(ChatColor.GRAY + "This server is running " + ChatColor.AQUA + Bukkit.getName());
+            sender.sendMessage(ChatColor.GRAY + "This server is running " + ChatColor.AQUA + "haxiCore" + ChatColor.GRAY + " (Implementation: " + Bukkit.getName() + ")");
             sender.sendMessage(ChatColor.GRAY + "Version: " + ChatColor.RED + Bukkit.getVersion());
         } else {
             StringBuilder name = new StringBuilder();
