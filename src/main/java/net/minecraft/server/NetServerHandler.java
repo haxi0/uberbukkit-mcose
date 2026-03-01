@@ -60,8 +60,6 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private int f;
     private int g;
     private int h;
-    private long lastKeepAliveTime = 0L;
-    private int lastPing = 0;
     private boolean i;
     private double x;
     private double y;
@@ -207,15 +205,13 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         this.networkManager.b();
 
         if (this.f - this.g > 20) {
-            this.lastKeepAliveTime = System.currentTimeMillis();
             this.sendPacket(new Packet0KeepAlive());
         }
 
-        // Periodically push updated ping to all clients for Tab overlay
+        // Periodically push updated player list to all clients for Tab overlay
         try {
             if ((MinecraftServer.currentTick - this.lastTick) >= 20) { // about once per second
                 this.lastTick = MinecraftServer.currentTick;
-                int currentPing = this.b();
                 if (this.player != null) {
                     String displayName = this.player.listName != null ? this.player.listName : this.player.name;
                     
@@ -224,7 +220,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                         this.minecraftServer.serverConfigurationManager.sendAll(new Packet201PlayerInfo(this.lastSentListName, false, 0));
                     }
                     
-                    Packet201PlayerInfo update = new Packet201PlayerInfo(displayName, true, currentPing);
+                    Packet201PlayerInfo update = new Packet201PlayerInfo(displayName, true, 0);
                     this.minecraftServer.serverConfigurationManager.sendAll(update);
                     this.lastSentListName = displayName;
                 }
@@ -1830,10 +1826,6 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public void a(Packet0KeepAlive packet0KeepAlive) {
-        if (this.lastKeepAliveTime > 0) {
-            this.lastPing = (int) (System.currentTimeMillis() - this.lastKeepAliveTime);
-            this.lastKeepAliveTime = 0L;
-        }
         this.receivedKeepAlive = true;
     }
 
@@ -1860,7 +1852,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     }
 
     public int b() {
-        return this.lastPing;
+        return this.networkManager.e();
     }
 
     public int getQueuedPacketCount() {
