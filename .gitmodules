@@ -1,0 +1,3 @@
+[submodule "haxiPlugin"]
+	path = haxiPlugin
+	url = https://github.com/haxi0/haxiPlugin.git
