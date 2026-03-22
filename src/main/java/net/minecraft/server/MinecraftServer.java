@@ -1290,6 +1290,14 @@ public class MinecraftServer implements Runnable, ICommandListener {
     public int getVoiceChatPort() {
         return this.voiceChatPort;
     }
+
+    /**
+     * Login handshake compatibility helper.
+     * UDP transport is attempted whenever voice chat is enabled.
+     */
+    public boolean isVoiceChatUDPEnabled() {
+        return this.voiceChatEnabled;
+    }
     
     public VoiceChatUDPServer getVoiceChatUDPServer() {
         return this.voiceChatUDPServer;
