@@ -56,7 +56,7 @@ public final class LootTables {
                 .add(LootEntry.builder("gunpowder").weight(10).count(1, 4))
                 .add(LootEntry.builder("string").weight(10).count(1, 4))
                 .add(LootEntry.builder("bucket").weight(10))
-                .add(LootEntry.builder("sponge").weight(6).count(1, 2))
+                .add(LootEntry.builder("wet_sponge").weight(6).count(1, 2))
                 .add(LootEntry.builder("redstone").weight(5).count(1, 4))
                 .add(LootEntry.builder("cocoa_beans").weight(10).metadata(3)) // Cocoa beans are dye metadata 3
                 .add(LootEntry.builder("pumpkin_seed").weight(8).count(1, 3))
@@ -104,7 +104,7 @@ public final class LootTables {
                 .add(LootEntry.builder("gunpowder").weight(10).count(1, 4))
                 .add(LootEntry.builder("string").weight(10).count(1, 4))
                 .add(LootEntry.builder("bucket").weight(8))
-                .add(LootEntry.builder("sponge").weight(8).count(1, 3))
+                .add(LootEntry.builder("wet_sponge").weight(8).count(1, 3))
                 .add(LootEntry.builder("redstone").weight(6).count(1, 4))
                 .add(LootEntry.builder("cocoa_beans").weight(8).metadata(3))
                 .add(LootEntry.builder("pumpkin_seed").weight(8).count(1, 3))

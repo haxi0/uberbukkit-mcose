@@ -27,13 +27,13 @@ public class BlockDiode extends Block {
     }
 
     public void a(World world, int i, int j, int k, Random random) {
-        int l = world.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getRepeaterMetadata(world, i, j, k);
         boolean flag = this.f(world, i, j, k, l);
 
         if (this.c && !flag) {
-            world.setTypeIdAndData(i, j, k, Block.DIODE_OFF.id, l);
+            CriticalBlockStateAccess.setLegacyState(world, i, j, k, Block.DIODE_OFF.id, l, true);
         } else if (!this.c) {
-            world.setTypeIdAndData(i, j, k, Block.DIODE_ON.id, l);
+            CriticalBlockStateAccess.setLegacyState(world, i, j, k, Block.DIODE_ON.id, l, true);
             if (!flag) {
                 int i1 = (l & 12) >> 2;
 
@@ -58,7 +58,7 @@ public class BlockDiode extends Block {
         if (!this.c) {
             return false;
         } else {
-            int i1 = iblockaccess.getData(i, j, k) & 3;
+            int i1 = CriticalBlockStateAccess.getRepeaterMetadata(iblockaccess, i, j, k) & 3;
 
             return i1 == 0 && l == 3 ? true : (i1 == 1 && l == 4 ? true : (i1 == 2 && l == 2 ? true : i1 == 3 && l == 5));
         }
@@ -66,10 +66,10 @@ public class BlockDiode extends Block {
 
     public void doPhysics(World world, int i, int j, int k, int l) {
         if (!this.f(world, i, j, k)) {
-            this.g(world, i, j, k, world.getData(i, j, k));
+            this.g(world, i, j, k, CriticalBlockStateAccess.getRepeaterMetadata(world, i, j, k));
             world.setTypeId(i, j, k, 0);
         } else {
-            int i1 = world.getData(i, j, k);
+            int i1 = CriticalBlockStateAccess.getRepeaterMetadata(world, i, j, k);
             boolean flag = this.f(world, i, j, k, i1);
             int j1 = (i1 & 12) >> 2;
 
@@ -86,16 +86,16 @@ public class BlockDiode extends Block {
 
         switch (i1) {
             case 0:
-                return world.isBlockFaceIndirectlyPowered(i, j, k + 1, 3) || world.getTypeId(i, j, k + 1) == Block.REDSTONE_WIRE.id && world.getData(i, j, k + 1) > 0;
+                return world.isBlockFaceIndirectlyPowered(i, j, k + 1, 3) || world.getTypeId(i, j, k + 1) == Block.REDSTONE_WIRE.id && CriticalBlockStateAccess.getRedstoneWirePower(world, i, j, k + 1) > 0;
 
             case 1:
-                return world.isBlockFaceIndirectlyPowered(i - 1, j, k, 4) || world.getTypeId(i - 1, j, k) == Block.REDSTONE_WIRE.id && world.getData(i - 1, j, k) > 0;
+                return world.isBlockFaceIndirectlyPowered(i - 1, j, k, 4) || world.getTypeId(i - 1, j, k) == Block.REDSTONE_WIRE.id && CriticalBlockStateAccess.getRedstoneWirePower(world, i - 1, j, k) > 0;
 
             case 2:
-                return world.isBlockFaceIndirectlyPowered(i, j, k - 1, 2) || world.getTypeId(i, j, k - 1) == Block.REDSTONE_WIRE.id && world.getData(i, j, k - 1) > 0;
+                return world.isBlockFaceIndirectlyPowered(i, j, k - 1, 2) || world.getTypeId(i, j, k - 1) == Block.REDSTONE_WIRE.id && CriticalBlockStateAccess.getRedstoneWirePower(world, i, j, k - 1) > 0;
 
             case 3:
-                return world.isBlockFaceIndirectlyPowered(i + 1, j, k, 5) || world.getTypeId(i + 1, j, k) == Block.REDSTONE_WIRE.id && world.getData(i + 1, j, k) > 0;
+                return world.isBlockFaceIndirectlyPowered(i + 1, j, k, 5) || world.getTypeId(i + 1, j, k) == Block.REDSTONE_WIRE.id && CriticalBlockStateAccess.getRedstoneWirePower(world, i + 1, j, k) > 0;
 
             default:
                 return false;
@@ -103,11 +103,11 @@ public class BlockDiode extends Block {
     }
 
     public boolean interact(World world, int i, int j, int k, EntityHuman entityhuman) {
-        int l = world.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getRepeaterMetadata(world, i, j, k);
         int i1 = (l & 12) >> 2;
 
         i1 = i1 + 1 << 2 & 12;
-        world.setData(i, j, k, i1 | l & 3);
+        CriticalBlockStateAccess.setMetadata(world, i, j, k, i1 | l & 3, true);
         return true;
     }
 
@@ -118,7 +118,7 @@ public class BlockDiode extends Block {
     public void postPlace(World world, int i, int j, int k, EntityLiving entityliving) {
         int l = ((MathHelper.floor((double) (entityliving.yaw * 4.0F / 360.0F) + 0.5D) & 3) + 2) % 4;
 
-        world.setData(i, j, k, l);
+        CriticalBlockStateAccess.setMetadata(world, i, j, k, l, true);
         boolean flag = this.f(world, i, j, k, l);
 
         if (flag) {

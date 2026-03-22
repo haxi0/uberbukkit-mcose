@@ -13,6 +13,7 @@ final class RegionFileWAL {
     private static final int HEADER_BYTES = 20;
     private static final int MAX_CHUNK_BYTES = 4096 * 255 - 5;
     private static final int MAX_WAL_PAYLOAD_BYTES = MAX_CHUNK_BYTES + 1;
+    private static final String WAL_LOG_PREFIX = "[RegionCore WAL]";
     private static final int WAL_LOG_LEVEL = getWalLogLevel();
     private final File walPath;
     private final RandomAccessFile walFile;
@@ -137,7 +138,7 @@ final class RegionFileWAL {
     }
 
     private static int getWalLogLevel() {
-        String s = System.getProperty("mcregion.wal.log", "basic");
+        String s = getWalProperty("log", "basic");
         String s1 = s.toLowerCase(Locale.ROOT);
 
         if (!"0".equals(s1) && !"false".equals(s1) && !"off".equals(s1)) {
@@ -149,8 +150,16 @@ final class RegionFileWAL {
 
     private void logWal(int i, String s) {
         if (WAL_LOG_LEVEL >= i) {
-            System.out.println("[McRegion WAL] " + s);
+            System.out.println(WAL_LOG_PREFIX + " " + s);
         }
+    }
+
+    private static String getWalProperty(String suffix, String fallback) {
+        String value = System.getProperty("regioncore.wal." + suffix);
+        if (value != null) {
+            return value;
+        }
+        return System.getProperty("mcregion.wal." + suffix, fallback);
     }
 
     private static int computeChecksum(byte[] abyte, int i) {

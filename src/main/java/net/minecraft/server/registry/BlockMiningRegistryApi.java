@@ -199,6 +199,9 @@ public final class BlockMiningRegistryApi {
         }
 
         BlockMiningRule rule = get(world, x, y, z);
+        if (rule.allowsDropsWithoutPreferredTool()) {
+            return true;
+        }
         if (!rule.isEnforcePreferredTool() || rule.getPreferredTool() == MiningToolType.NONE) {
             return player.b(block);
         }
@@ -265,9 +268,10 @@ public final class BlockMiningRegistryApi {
         }
 
         boolean preferredMatch = hasPreferredTool(player, rule.getPreferredTool());
+        boolean emptyHandOrNonTool = getHeldToolType(player) == MiningToolType.NONE;
         boolean canHarvest = player.b(block);
         if (rule.isEnforcePreferredTool() && rule.getPreferredTool() != MiningToolType.NONE) {
-            canHarvest = preferredMatch;
+            canHarvest = preferredMatch || (rule.allowsDropsWithoutPreferredTool() && emptyHandOrNonTool);
         }
 
         float effectivePlayerStrength = player.a(block);

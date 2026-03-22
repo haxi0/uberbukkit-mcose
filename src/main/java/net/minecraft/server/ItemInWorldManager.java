@@ -372,6 +372,9 @@ public class ItemInWorldManager {
             return false;
         }
 
+        int originalCount = itemstack == null ? 0 : itemstack.count;
+        int originalDamage = itemstack == null ? 0 : itemstack.getItemDamage();
+
         BlockPlaceEvent blockPlaceEvent = new BlockPlaceEvent(entityhuman, world, i, j, k, l, itemstack);
         EventBus.global().publish(blockPlaceEvent);
         if (blockPlaceEvent.isCancelled()) {
@@ -401,6 +404,13 @@ public class ItemInWorldManager {
             // If we have 'true' and no explicit deny *or* an explicit allow -- run the item part of the hook
             if (itemstack != null && ((!result && event.useItemInHand() != Event.Result.DENY) || event.useItemInHand() == Event.Result.ALLOW)) {
                 this.useItem(entityhuman, world, itemstack);
+            }
+
+            // Safety net: keep held stacks stable in creative even if custom item logic decrements.
+            if (this.isCreative() && itemstack != null) {
+                itemstack.count = originalCount;
+                itemstack.setItemDamage(originalDamage);
+                entityhuman.inventory.items[entityhuman.inventory.itemInHandIndex] = itemstack;
             }
         }
         return result;

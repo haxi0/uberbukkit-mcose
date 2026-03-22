@@ -5,6 +5,7 @@ import java.util.Random;
 import uk.betacraft.uberbukkit.UberbukkitConfig;
 
 public class EntitySheep extends EntityAnimal {
+    private static final EntityDataAccessor<Byte> DATA_SHEEP_FLAGS_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
 
     public static final float[][] a = new float[][] { { 1.0F, 1.0F, 1.0F }, { 0.95F, 0.7F, 0.2F }, { 0.9F, 0.5F, 0.85F }, { 0.6F, 0.7F, 0.95F }, { 0.9F, 0.9F, 0.2F }, { 0.5F, 0.8F, 0.1F }, { 0.95F, 0.7F, 0.8F }, { 0.3F, 0.3F, 0.3F }, { 0.6F, 0.6F, 0.6F }, { 0.3F, 0.6F, 0.7F }, { 0.7F, 0.4F, 0.9F }, { 0.2F, 0.4F, 0.8F }, { 0.5F, 0.4F, 0.3F }, { 0.4F, 0.5F, 0.2F }, { 0.8F, 0.3F, 0.3F }, { 0.1F, 0.1F, 0.1F } };
 
@@ -17,9 +18,22 @@ public class EntitySheep extends EntityAnimal {
         this.b(0.9F, 1.3F);
     }
 
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.getSynchedEntityData().define(DATA_SHEEP_FLAGS_ID, Byte.valueOf((byte)0));
+    }
+
     protected void b() {
         super.b();
-        this.datawatcher.a(16, new Byte((byte) 0));
+        this.datawatcher.a(16, Byte.valueOf(this.getSheepFlags()));
+    }
+
+    public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+        super.onSyncedDataUpdated(accessor);
+        if (accessor == DATA_SHEEP_FLAGS_ID) {
+            Byte value = this.getSynchedEntityData().get(DATA_SHEEP_FLAGS_ID);
+            this.datawatcher.watch(16, value == null ? Byte.valueOf((byte)0) : value);
+        }
     }
 
     public boolean damageEntity(Entity entity, int i) {
@@ -178,26 +192,25 @@ public class EntitySheep extends EntityAnimal {
     }
 
     public int getColor() {
-        return this.datawatcher.a(16) & 15;
+        return this.getSheepFlags() & 15;
     }
 
     public void setColor(int i) {
-        byte b0 = this.datawatcher.a(16);
-
-        this.datawatcher.watch(16, Byte.valueOf((byte) (b0 & 240 | i & 15)));
+        byte flags = this.getSheepFlags();
+        this.setSheepFlags((byte)(flags & 240 | i & 15));
     }
 
     public boolean isSheared() {
-        return (this.datawatcher.a(16) & 16) != 0;
+        return (this.getSheepFlags() & 16) != 0;
     }
 
     public void setSheared(boolean flag) {
-        byte b0 = this.datawatcher.a(16);
+        byte flags = this.getSheepFlags();
 
         if (flag) {
-            this.datawatcher.watch(16, Byte.valueOf((byte) (b0 | 16)));
+            this.setSheepFlags((byte)(flags | 16));
         } else {
-            this.datawatcher.watch(16, Byte.valueOf((byte) (b0 & -17)));
+            this.setSheepFlags((byte)(flags & -17));
         }
     }
 
@@ -220,6 +233,22 @@ public class EntitySheep extends EntityAnimal {
             return 6;
         } else {
             return 0;
+        }
+    }
+
+    private byte getSheepFlags() {
+        Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_SHEEP_FLAGS_ID);
+        if (value != null) {
+            return value.byteValue();
+        }
+        return this.datawatcher.a(16);
+    }
+
+    private void setSheepFlags(byte flags) {
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_SHEEP_FLAGS_ID, Byte.valueOf(flags));
+        } else {
+            this.datawatcher.watch(16, Byte.valueOf(flags));
         }
     }
 }

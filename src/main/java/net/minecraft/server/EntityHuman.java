@@ -29,6 +29,7 @@ import net.minecraft.server.event.events.PlayerMoveEvent;
 import net.minecraft.server.registry.PlayerCapabilityRegistryApi;
 
 public abstract class EntityHuman extends EntityLiving {
+    private static final EntityDataAccessor<Byte> DATA_PLAYER_FLAGS_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
 
     public InventoryPlayer inventory = new InventoryPlayer(this);
     public Container defaultContainer;
@@ -92,9 +93,22 @@ public abstract class EntityHuman extends EntityLiving {
         this.texture = "/mob/char.png";
     }
 
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.getSynchedEntityData().define(DATA_PLAYER_FLAGS_ID, Byte.valueOf((byte)0));
+    }
+
     protected void b() {
         super.b();
-        this.datawatcher.a(16, Byte.valueOf((byte) 0));
+        this.datawatcher.a(16, Byte.valueOf(this.getPlayerFlags()));
+    }
+
+    public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+        super.onSyncedDataUpdated(accessor);
+        if (accessor == DATA_PLAYER_FLAGS_ID) {
+            Byte value = this.getSynchedEntityData().get(DATA_PLAYER_FLAGS_ID);
+            this.datawatcher.watch(16, value == null ? Byte.valueOf((byte)0) : value);
+        }
     }
 
     public void m_() {
@@ -288,6 +302,22 @@ public abstract class EntityHuman extends EntityLiving {
 
         this.height = 0.1F;
         this.a(StatisticList.y, 1);
+    }
+
+    protected byte getPlayerFlags() {
+        Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_PLAYER_FLAGS_ID);
+        if (value != null) {
+            return value.byteValue();
+        }
+        return this.datawatcher.a(16);
+    }
+
+    protected void setPlayerFlags(byte flags) {
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_PLAYER_FLAGS_ID, Byte.valueOf(flags));
+        } else {
+            this.datawatcher.watch(16, Byte.valueOf(flags));
+        }
     }
 
     public void c(Entity entity, int i) {

@@ -17,10 +17,6 @@ public class ItemStep extends ItemBlock {
             return false;
         }
 
-        if (this.tryMergeStep(itemstack, entityhuman, world, i, j, k, i, j, k)) {
-            return true;
-        }
-
         int x = i;
         int y = j;
         int z = k;
@@ -48,8 +44,25 @@ public class ItemStep extends ItemBlock {
             ++x;
         }
 
-        if (this.tryMergeStep(itemstack, entityhuman, world, x, y, z, i, j, k)) {
-            return true;
+        // Match client ItemSlab merge priority:
+        // - Top-face clicks merge clicked slab first.
+        // - Other faces try adjacent placement/merge first, with clicked-slab fallback only
+        //   when adjacent placement is blocked.
+        if (l == 1) {
+            if (this.tryMergeStep(itemstack, entityhuman, world, i, j, k, i, j, k)) {
+                return true;
+            }
+            if (this.tryMergeStep(itemstack, entityhuman, world, x, y, z, i, j, k)) {
+                return true;
+            }
+        } else {
+            if (this.tryMergeStep(itemstack, entityhuman, world, x, y, z, i, j, k)) {
+                return true;
+            }
+            if (!world.a(Block.STEP.id, x, y, z, false, l)
+                && this.tryMergeStep(itemstack, entityhuman, world, i, j, k, i, j, k)) {
+                return true;
+            }
         }
 
         return super.a(itemstack, entityhuman, world, i, j, k, l);

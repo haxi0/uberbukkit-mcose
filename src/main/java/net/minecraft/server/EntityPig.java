@@ -9,6 +9,7 @@ import uk.betacraft.uberbukkit.UberbukkitConfig;
 // CraftBukkit end
 
 public class EntityPig extends EntityAnimal {
+    private static final EntityDataAccessor<Byte> DATA_PIG_FLAGS_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
 
     public EntityPig(World world) {
         super(world);
@@ -16,8 +17,21 @@ public class EntityPig extends EntityAnimal {
         this.b(0.9F, 0.9F);
     }
 
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.getSynchedEntityData().define(DATA_PIG_FLAGS_ID, Byte.valueOf((byte)0));
+    }
+
     protected void b() {
-        this.datawatcher.a(16, Byte.valueOf((byte) 0));
+        this.datawatcher.a(16, Byte.valueOf(this.getPigFlags()));
+    }
+
+    public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+        super.onSyncedDataUpdated(accessor);
+        if (accessor == DATA_PIG_FLAGS_ID) {
+            Byte value = this.getSynchedEntityData().get(DATA_PIG_FLAGS_ID);
+            this.datawatcher.watch(16, value == null ? Byte.valueOf((byte)0) : value);
+        }
     }
 
     public void b(NBTTagCompound nbttagcompound) {
@@ -61,15 +75,17 @@ public class EntityPig extends EntityAnimal {
     }
 
     public boolean hasSaddle() {
-        return (this.datawatcher.a(16) & 1) != 0;
+        return (this.getPigFlags() & 1) != 0;
     }
 
     public void setSaddle(boolean flag) {
+        byte flags = this.getPigFlags();
         if (flag) {
-            this.datawatcher.watch(16, Byte.valueOf((byte) 1));
+            flags = (byte)(flags | 1);
         } else {
-            this.datawatcher.watch(16, Byte.valueOf((byte) 0));
+            flags = (byte)(flags & -2);
         }
+        this.setPigFlags(flags);
     }
 
     public void a(EntityWeatherStorm entityweatherstorm) {
@@ -96,6 +112,22 @@ public class EntityPig extends EntityAnimal {
         super.a(f);
         if (f > 5.0F && this.passenger instanceof EntityHuman) {
             ((EntityHuman) this.passenger).a((Statistic) AchievementList.u);
+        }
+    }
+
+    private byte getPigFlags() {
+        Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_PIG_FLAGS_ID);
+        if (value != null) {
+            return value.byteValue();
+        }
+        return this.datawatcher.a(16);
+    }
+
+    private void setPigFlags(byte flags) {
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_PIG_FLAGS_ID, Byte.valueOf(flags));
+        } else {
+            this.datawatcher.watch(16, Byte.valueOf(flags));
         }
     }
 }

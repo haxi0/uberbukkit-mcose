@@ -30,6 +30,10 @@ public final class ChunkGeneratorTypeRegistryBootstrap {
             Class<?> alpha = Class.forName("net.minecraft.server.Alpha.AlphaChunkProvider");
             register("alpha", alpha);
         } catch (Throwable ignored) {}
+        try {
+            Class<?> infdev = Class.forName("net.minecraft.server.Infdev.InfdevChunkProvider");
+            register("infdev", infdev);
+        } catch (Throwable ignored) {}
     }
 
     private static void register(String path, Class<?> provider) {
@@ -37,4 +41,3 @@ public final class ChunkGeneratorTypeRegistryBootstrap {
         ChunkGeneratorTypeRegistryApi.register(new ResourceLocation("minecraft", path), provider);
     }
 }
-

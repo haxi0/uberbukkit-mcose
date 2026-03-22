@@ -11,6 +11,8 @@ import net.minecraft.server.ItemRecord;
 import net.minecraft.server.ItemSapling;
 import net.minecraft.server.ItemStack;
 import net.minecraft.server.ItemStoneBrick;
+import net.minecraft.server.Holder;
+import net.minecraft.server.MappedRegistry;
 import net.minecraft.server.util.ResourceLocation;
 
 import java.nio.charset.StandardCharsets;
@@ -32,6 +34,7 @@ public final class ItemRegistry {
     private static final Map<ResourceLocation, Integer> keyToDamage = new HashMap<ResourceLocation, Integer>();
     private static final Map<Item, ResourceLocation> keyOf = new IdentityHashMap<Item, ResourceLocation>();
     private static final List<Listener> listeners = new ArrayList<Listener>();
+    private static final MappedRegistry<Item> holders = new MappedRegistry<Item>();
     private static boolean scanned = false;
 
     public interface Listener {
@@ -50,6 +53,7 @@ public final class ItemRegistry {
         if (!keyOf.containsKey(item)) {
             keyOf.put(item, key);
         }
+        holders.registerIfAbsent(key, item, legacyId);
         try { Registries.ITEM.registerIfAbsent(key, item); } catch (Throwable ignored) {}
         for (int i = 0; i < listeners.size(); i++) {
             try { listeners.get(i).onRegistered(key, item); } catch (Throwable ignored) {}
@@ -64,6 +68,21 @@ public final class ItemRegistry {
     public static ResourceLocation getKey(Item item) {
         ensureScanned();
         return keyOf.get(item);
+    }
+
+    public static Holder<Item> getHolder(ResourceLocation key) {
+        ensureScanned();
+        return holders.getHolder(key);
+    }
+
+    public static Holder<Item> getHolder(Item item) {
+        ensureScanned();
+        return holders.getHolder(item);
+    }
+
+    public static Holder<Item> getHolderByRuntimeId(int runtimeId) {
+        ensureScanned();
+        return holders.holderById(runtimeId);
     }
 
     public static ResourceLocation getKeyForStack(ItemStack stack) {
@@ -371,6 +390,14 @@ public final class ItemRegistry {
             registerColorMeta("stone_brick_slab", item, 5);
         }
 
+        // Pumpkin variants in this fork:
+        // - 86:0 = carved_pumpkin
+        // - 86:1 = pumpkin (plain/uncarved)
+        if ("pumpkin".equals(path) && item.id == Block.PUMPKIN.id) {
+            registerColorMeta("carved_pumpkin", item, 0);
+            registerColorMeta("pumpkin", item, 1);
+        }
+
         if ("fencegate".equals(path)) {
             registerAliasIfFree(new ResourceLocation("minecraft", "fence_gate"), item);
         }
@@ -401,6 +428,7 @@ public final class ItemRegistry {
             byKey.put(rl, item);
             keyToDamage.put(rl, Integer.valueOf(damage));
             VariantDefaults.put(rl, damage);
+            holders.registerIfAbsent(rl, item, getLegacyId(item));
             try { Registries.ITEM.registerIfAbsent(rl, item); } catch (Throwable ignored) {}
         } catch (Throwable ignored) {}
     }
@@ -410,6 +438,7 @@ public final class ItemRegistry {
         Item existing = byKey.get(alias);
         if (existing == null) {
             byKey.put(alias, item);
+            holders.registerIfAbsent(alias, item, getLegacyId(item));
             try { Registries.ITEM.registerIfAbsent(alias, item); } catch (Throwable ignored) {}
         }
     }

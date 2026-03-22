@@ -17,11 +17,16 @@ import uk.betacraft.uberbukkit.UberbukkitConfig;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
+import net.minecraft.server.registry.EntityTypeRegistry;
 
 // CraftBukkit start
 // CraftBukkit end
 
-public abstract class Entity {
+public abstract class Entity implements SyncedDataHolder {
+    protected static final EntityDataAccessor<Byte> DATA_SHARED_FLAGS_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.BYTE);
+    protected static final EntityDataAccessor<Integer> DATA_AIR_SUPPLY_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.INT);
+    protected static final EntityDataAccessor<String> DATA_CUSTOM_NAME_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.STRING);
+    protected static final EntityDataAccessor<Boolean> DATA_NO_GRAVITY_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.BOOLEAN);
 
     // Poseidon start - Backport of 0070-Use-a-Shared-Random-for-Entities.patch from PaperSpigot
     public static Random SHARED_RANDOM = new Random() {
@@ -105,6 +110,10 @@ public abstract class Entity {
     public boolean bK;
     public boolean airBorne;
     public UUID uniqueId = UUID.randomUUID(); // CraftBukkit
+    private Holder<EntityTypeDef<?>> entityTypeHolder;
+    private SynchedEntityData synchedEntityData;
+    private boolean noGravity;
+    private String customName;
     
     // UberBukkit - Track player-caused damage for death messages
     public EntityPlayer lastPlayerAttacker; // Last player who damaged this entity
@@ -147,15 +156,81 @@ public abstract class Entity {
         this.bF = 0.0F;
         this.bG = false;
         this.world = world;
+        this.entityTypeHolder = EntityTypeRegistry.getTypeHolder(this.getClass());
         this.setPosition(0.0D, 0.0D, 0.0D);
         this.datawatcher.a(0, Byte.valueOf((byte) 0));
+        this.synchedEntityData = new SynchedEntityData(this);
+        this.defineSynchedData();
         this.b();
+    }
+
+    protected void defineSynchedData() {
+        this.synchedEntityData.define(DATA_SHARED_FLAGS_ID, Byte.valueOf((byte)0));
+        this.synchedEntityData.define(DATA_AIR_SUPPLY_ID, Integer.valueOf(this.airTicks));
+        this.synchedEntityData.define(DATA_CUSTOM_NAME_ID, "");
+        this.synchedEntityData.define(DATA_NO_GRAVITY_ID, Boolean.FALSE);
     }
 
     protected abstract void b();
 
     public DataWatcher aa() {
         return this.datawatcher;
+    }
+
+    public SynchedEntityData getSynchedEntityData() {
+        return this.synchedEntityData;
+    }
+
+    public Holder<EntityTypeDef<?>> getEntityTypeHolder() {
+        return this.entityTypeHolder;
+    }
+
+    public void setNoGravity(boolean noGravity) {
+        this.noGravity = noGravity;
+        if (this.synchedEntityData != null) {
+            this.synchedEntityData.set(DATA_NO_GRAVITY_ID, Boolean.valueOf(noGravity));
+        }
+    }
+
+    public boolean isNoGravity() {
+        Boolean synced = this.synchedEntityData == null ? null : this.synchedEntityData.get(DATA_NO_GRAVITY_ID);
+        return synced != null ? synced.booleanValue() : this.noGravity;
+    }
+
+    public void setCustomName(String customName) {
+        this.customName = customName;
+        if (this.synchedEntityData != null) {
+            this.synchedEntityData.set(DATA_CUSTOM_NAME_ID, customName == null ? "" : customName);
+        }
+    }
+
+    public String getCustomName() {
+        String synced = this.synchedEntityData == null ? null : this.synchedEntityData.get(DATA_CUSTOM_NAME_ID);
+        if (synced != null && synced.length() > 0) {
+            return synced;
+        }
+        return this.customName;
+    }
+
+    public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+        if (accessor == DATA_SHARED_FLAGS_ID) {
+            Byte flags = this.synchedEntityData.get(DATA_SHARED_FLAGS_ID);
+            this.datawatcher.watch(0, flags == null ? Byte.valueOf((byte)0) : flags);
+        } else if (accessor == DATA_AIR_SUPPLY_ID) {
+            Integer syncedAir = this.synchedEntityData.get(DATA_AIR_SUPPLY_ID);
+            if (syncedAir != null) {
+                this.airTicks = syncedAir.intValue();
+            }
+        } else if (accessor == DATA_CUSTOM_NAME_ID) {
+            String syncedName = this.synchedEntityData.get(DATA_CUSTOM_NAME_ID);
+            this.customName = syncedName == null || syncedName.length() == 0 ? null : syncedName;
+        } else if (accessor == DATA_NO_GRAVITY_ID) {
+            Boolean syncedNoGravity = this.synchedEntityData.get(DATA_NO_GRAVITY_ID);
+            this.noGravity = syncedNoGravity != null && syncedNoGravity.booleanValue();
+        }
+    }
+
+    public void onSyncedDataUpdated(List<SynchedEntityData.DataValue<?>> updates) {
     }
 
     public boolean equals(Object object) {
@@ -307,6 +382,11 @@ public abstract class Entity {
         if (!this.world.isStatic) {
             this.a(0, this.fireTicks > 0);
             this.a(2, this.vehicle != null);
+        }
+
+        if (this.synchedEntityData != null) {
+            this.synchedEntityData.set(DATA_AIR_SUPPLY_ID, Integer.valueOf(this.airTicks));
+            this.synchedEntityData.set(DATA_NO_GRAVITY_ID, Boolean.valueOf(this.noGravity));
         }
 
         this.justCreated = false;
@@ -953,6 +1033,14 @@ public abstract class Entity {
         nbttagcompound.a("FallDistance", this.fallDistance);
         nbttagcompound.a("Fire", (short) this.fireTicks);
         nbttagcompound.a("Air", (short) this.airTicks);
+        nbttagcompound.a("NoGravity", this.isNoGravity());
+        if (this.getCustomName() != null && this.getCustomName().length() > 0) {
+            nbttagcompound.setString("CustomName", this.getCustomName());
+        }
+        if (this.entityTypeHolder != null && this.entityTypeHolder.key() != null) {
+            nbttagcompound.setString("entity_type", this.entityTypeHolder.key().toString());
+        }
+        nbttagcompound.setString("entity_uuid", this.uniqueId.toString());
         nbttagcompound.a("OnGround", this.onGround);
         nbttagcompound.a("TicksExisted", this.ticksLived);
         // CraftBukkit start
@@ -994,6 +1082,18 @@ public abstract class Entity {
         this.fallDistance = nbttagcompound.g("FallDistance");
         this.fireTicks = nbttagcompound.d("Fire");
         this.airTicks = nbttagcompound.d("Air");
+        this.noGravity = nbttagcompound.m("NoGravity");
+        if (nbttagcompound.hasKey("CustomName")) {
+            this.customName = nbttagcompound.getString("CustomName");
+        }
+        if (nbttagcompound.hasKey("entity_type")) {
+            try {
+                Holder<EntityTypeDef<?>> holder = EntityTypeRegistry.getTypeHolder(new net.minecraft.server.util.ResourceLocation(nbttagcompound.getString("entity_type")));
+                if (holder != null) {
+                    this.entityTypeHolder = holder;
+                }
+            } catch (Throwable ignored) {}
+        }
         this.onGround = nbttagcompound.m("OnGround");
         if (nbttagcompound.hasKey("TicksExisted")) {
             this.ticksLived = nbttagcompound.e("TicksExisted");
@@ -1008,6 +1108,12 @@ public abstract class Entity {
             this.uniqueId = new UUID(most, least);
         }
         // CraftBukkit end
+
+        if (this.synchedEntityData != null) {
+            this.synchedEntityData.set(DATA_AIR_SUPPLY_ID, Integer.valueOf(this.airTicks), true);
+            this.synchedEntityData.set(DATA_NO_GRAVITY_ID, Boolean.valueOf(this.noGravity), true);
+            this.synchedEntityData.set(DATA_CUSTOM_NAME_ID, this.customName == null ? "" : this.customName, true);
+        }
 
         this.c(this.yaw, this.pitch);
         this.a(nbttagcompound);
@@ -1281,16 +1387,25 @@ public abstract class Entity {
     }
 
     protected boolean d(int i) {
-        return (this.datawatcher.a(0) & 1 << i) != 0;
+        Byte synced = this.synchedEntityData == null ? null : this.synchedEntityData.get(DATA_SHARED_FLAGS_ID);
+        byte flags = synced == null ? this.datawatcher.a(0) : synced.byteValue();
+        return (flags & 1 << i) != 0;
     }
 
     protected void a(int i, boolean flag) {
-        byte b0 = this.datawatcher.a(0);
+        Byte synced = this.synchedEntityData == null ? null : this.synchedEntityData.get(DATA_SHARED_FLAGS_ID);
+        byte b0 = synced == null ? this.datawatcher.a(0) : synced.byteValue();
+        byte updated;
 
         if (flag) {
-            this.datawatcher.watch(0, Byte.valueOf((byte) (b0 | 1 << i)));
+            updated = (byte)(b0 | 1 << i);
         } else {
-            this.datawatcher.watch(0, Byte.valueOf((byte) (b0 & ~(1 << i))));
+            updated = (byte)(b0 & ~(1 << i));
+        }
+
+        this.datawatcher.watch(0, Byte.valueOf(updated));
+        if (this.synchedEntityData != null) {
+            this.synchedEntityData.set(DATA_SHARED_FLAGS_ID, Byte.valueOf(updated));
         }
     }
 

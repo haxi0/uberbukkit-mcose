@@ -169,7 +169,8 @@ public class Explosion {
         ArrayList<ChunkPosition> arraylist = new ArrayList<>();
         arraylist.addAll(this.blocks);
 
-        if (this.setFire) {
+        boolean allowFireTick = this.world.worldData == null || this.world.worldData.getDoFireTick();
+        if (this.setFire && allowFireTick) {
             for (int l2 = arraylist.size() - 1; l2 >= 0; --l2) {
                 ChunkPosition chunkposition = arraylist.get(l2);
                 int i3 = chunkposition.x;

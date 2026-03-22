@@ -101,7 +101,8 @@ public class EntityTrackerEntry {
         }
 
         DataWatcher datawatcher = this.tracker.aa();
-        boolean hasMetadataUpdate = datawatcher.a();
+        boolean hasMetadataUpdate = datawatcher.a()
+                || this.tracker.getSynchedEntityData() != null && this.tracker.getSynchedEntityData().isDirty();
         EntityTracker entityTracker = resolveEntityTracker();
         EntityTracker.TrackingPressureState pressureState = entityTracker != null ? entityTracker.getTrackingPressureState() : EntityTracker.TrackingPressureState.NORMAL;
         boolean nearLivingEntity = entityTracker != null
@@ -205,7 +206,7 @@ public class EntityTrackerEntry {
 
 
             if (hasMetadataUpdate) {
-                this.b((Packet) (new Packet40EntityMetadata(this.tracker.id, datawatcher)));
+                this.b((Packet) (new Packet40EntityMetadata(this.tracker)));
             }
 
             // uberbukkit - send both methods. legacy packet 18 gets ignored by clients that support packet 40
@@ -351,7 +352,7 @@ public class EntityTrackerEntry {
                         }
                     } else {
                         if (!this.tracker.datawatcher.getD()) {
-                            entityplayer.netServerHandler.sendPacket(new Packet40EntityMetadata(this.tracker.id, this.tracker.datawatcher));
+                            entityplayer.netServerHandler.sendPacket(new Packet40EntityMetadata(this.tracker));
                         }
                     }
 
@@ -379,6 +380,15 @@ public class EntityTrackerEntry {
                         for (int i = 0; i < aitemstack.length; ++i) {
                             entityplayer.netServerHandler.sendPacket(new Packet5EntityEquipment(this.tracker.id, i, aitemstack[i]));
                         }
+                    }
+
+                    if (this.tracker instanceof EntitySkeleton) {
+                        EntitySkeleton skeleton = (EntitySkeleton) this.tracker;
+                        boolean hostile = skeleton.target != null && skeleton.target.T();
+                        entityplayer.netServerHandler.sendPacket(new Packet38EntityStatus(this.tracker.id, (byte) (hostile ? 14 : 15)));
+                    } else if (this.tracker instanceof EntityPlayer) {
+                        EntityPlayer trackedPlayer = (EntityPlayer) this.tracker;
+                        entityplayer.netServerHandler.sendPacket(new Packet38EntityStatus(this.tracker.id, (byte) (trackedPlayer.isBowPoseActive() ? 16 : 17)));
                     }
 
                     if (this.tracker instanceof EntityHuman) {

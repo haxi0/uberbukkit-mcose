@@ -16,6 +16,26 @@ public abstract class NetHandler {
     public void a(Packet202MapChunkZstd packet202mapchunkzstd) {
     }
 
+    public void a(Packet204AddEntityV2 packet204addentityv2) {
+        this.a((Packet) packet204addentityv2);
+    }
+
+    public void a(Packet205SetEntityDataV2 packet205setentitydatav2) {
+        this.a((Packet) packet205setentitydatav2);
+    }
+
+    public void a(Packet206EntityMoveV2 packet206entitymovev2) {
+        this.a((Packet) packet206entitymovev2);
+    }
+
+    public void a(Packet207EntityLinkV2 packet207entitylinkv2) {
+        this.a((Packet) packet207entitylinkv2);
+    }
+
+    public void a(Packet208EntityEquipmentV2 packet208entityequipmentv2) {
+        this.a((Packet) packet208entityequipmentv2);
+    }
+
     public void a(Packet packet) {
     }
 

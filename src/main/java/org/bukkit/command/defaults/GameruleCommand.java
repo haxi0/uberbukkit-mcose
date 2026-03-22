@@ -4,8 +4,11 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.craftbukkit.CraftServer;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
+import org.bukkit.entity.Player;
 import net.minecraft.server.WorldData;
 import net.minecraft.server.MinecraftServer;
+import java.util.Locale;
 
 public class GameruleCommand extends VanillaCommand {
     
@@ -36,7 +39,24 @@ public class GameruleCommand extends VanillaCommand {
     }
 
     private boolean isSpawnProtectionRule(String name) {
-        return name.equalsIgnoreCase("spawnradius") || name.equalsIgnoreCase("spawnprotectionradius");
+        return name.equalsIgnoreCase("spawnprotectionradius");
+    }
+
+    private boolean isRespawnRadiusRule(String name) {
+        return name.equalsIgnoreCase("spawnradius");
+    }
+
+    private WorldData resolveTargetWorldData(CommandSender sender, MinecraftServer mcServer) {
+        if (sender instanceof Player) {
+            CraftPlayer craftPlayer = (CraftPlayer) sender;
+            if (craftPlayer.getHandle() != null && craftPlayer.getHandle().world != null) {
+                return craftPlayer.getHandle().world.worldData;
+            }
+        }
+        if (mcServer.worlds.isEmpty()) {
+            return null;
+        }
+        return mcServer.worlds.get(0).worldData;
     }
 
     @Override
@@ -58,13 +78,9 @@ public class GameruleCommand extends VanillaCommand {
         }
 
         MinecraftServer mcServer = ((CraftServer) Bukkit.getServer()).getServer();
-        if (mcServer.worlds.isEmpty()) {
-            sender.sendMessage(ChatColor.RED + "Error: No worlds loaded on the server.");
-            return true;
-        }
-        WorldData worldData = mcServer.worlds.get(0).worldData;
+        WorldData worldData = resolveTargetWorldData(sender, mcServer);
         if (worldData == null) {
-            sender.sendMessage(ChatColor.RED + "Error: Could not retrieve world data for the primary world.");
+            sender.sendMessage(ChatColor.RED + "Error: Could not retrieve world data for the target world.");
             return true;
         }
 
@@ -90,6 +106,8 @@ public class GameruleCommand extends VanillaCommand {
                 sender.sendMessage(args[0] + " = " + worldData.getAdvertiseAchievements());
             } else if (ruleName.equals("keepinventory")) {
                 sender.sendMessage(args[0] + " = " + worldData.getKeepInventory());
+            } else if (isRespawnRadiusRule(ruleName)) {
+                sender.sendMessage(args[0] + " = " + worldData.getSpawnRadius());
             } else if (isSpawnProtectionRule(ruleName)) {
                 sender.sendMessage(args[0] + " = " + Bukkit.getServer().getSpawnRadius());
             } else {
@@ -108,11 +126,17 @@ public class GameruleCommand extends VanillaCommand {
                     sender.sendMessage(ChatColor.RED + "Invalid value for game rule. Expected an integer.");
                     return false;
                 }
-                
-                if (isSpawnProtectionRule(ruleName)) {
+
+                if (isRespawnRadiusRule(ruleName)) {
+                    int clampedValue = Math.max(0, intValue);
+                    worldData.setSpawnRadius(clampedValue);
+                    sender.sendMessage("Game rule " + args[0] + " has been set to " + clampedValue);
+                    if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
+                        Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + clampedValue);
+                    }
+                } else if (isSpawnProtectionRule(ruleName)) {
                     int clampedValue = Math.max(0, intValue);
                     Bukkit.getServer().setSpawnRadius(clampedValue);
-                    worldData.setSpawnRadius(clampedValue); // Keep world gamerule data aligned
                     sender.sendMessage("Game rule " + args[0] + " has been set to " + clampedValue);
                     if (!(sender instanceof org.bukkit.command.ConsoleCommandSender)) {
                         Bukkit.getLogger().info("User " + sender.getName() + " set game rule " + args[0] + " to " + clampedValue);
@@ -183,22 +207,24 @@ public class GameruleCommand extends VanillaCommand {
     public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
         java.util.List<String> completions = new java.util.ArrayList<String>();
         if (args.length == 1) {
-            String prefix = args[0].toLowerCase();
+            String rawPrefix = args[0] == null ? "" : args[0];
+            String prefix = rawPrefix.toLowerCase(Locale.ROOT);
+            boolean preferLowerCase = rawPrefix.length() > 0 && rawPrefix.equals(rawPrefix.toLowerCase(Locale.ROOT));
             // Add all gamerules
             for (String rule : BOOLEAN_RULES) {
-                if (rule.toLowerCase().startsWith(prefix)) {
-                    completions.add(rule);
+                if (rule.toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                    completions.add(preferLowerCase ? rule.toLowerCase(Locale.ROOT) : rule);
                 }
             }
             for (String rule : INTEGER_RULES) {
-                if (rule.toLowerCase().startsWith(prefix)) {
-                    completions.add(rule);
+                if (rule.toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                    completions.add(preferLowerCase ? rule.toLowerCase(Locale.ROOT) : rule);
                 }
             }
         } else if (args.length == 2) {
             // Suggest true/false for boolean rules, nothing for integer rules
             if (isBooleanRule(args[0])) {
-                String prefix = args[1].toLowerCase();
+                String prefix = (args[1] == null ? "" : args[1]).toLowerCase(Locale.ROOT);
                 String[] values = {"true", "false"};
                 for (String val : values) {
                     if (val.startsWith(prefix)) {

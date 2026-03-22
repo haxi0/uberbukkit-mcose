@@ -34,7 +34,8 @@ public class VoiceChatRoomManager {
 		if(player == null) return;
 		String key = player.name.toLowerCase(Locale.ROOT);
 		String roomName = this.playerToRoom.remove(key);
-		this.playerRoomVoiceRouting.remove(key);
+		// Preserve per-player voice route preference across reconnects/respawns.
+		// This avoids silent fallback to default room routing after entity/session churn.
 		if(roomName != null) {
 			ChatRoom room = this.rooms.get(roomName);
 			if(room != null) {
@@ -69,11 +70,9 @@ public class VoiceChatRoomManager {
 			return Collections.emptyList();
 		}
 		List<EntityPlayer> recipients = new ArrayList<EntityPlayer>();
-		for (Object obj : this.server.serverConfigurationManager.players) {
-			if (!(obj instanceof EntityPlayer)) {
-				continue;
-			}
-			EntityPlayer member = (EntityPlayer) obj;
+		List<EntityPlayer> onlinePlayers = this.server.serverConfigurationManager.getOnlinePlayersSnapshot();
+		for (int i = 0; i < onlinePlayers.size(); i++) {
+			EntityPlayer member = onlinePlayers.get(i);
 			if (speaker != null && member == speaker) {
 				continue;
 			}
@@ -375,9 +374,9 @@ public class VoiceChatRoomManager {
 	}
 
 	public synchronized void broadcastSnapshot() {
-		for(Object obj : this.server.serverConfigurationManager.players) {
-			if(!(obj instanceof EntityPlayer)) continue;
-			this.sendSnapshot((EntityPlayer)obj);
+		List<EntityPlayer> onlinePlayers = this.server.serverConfigurationManager.getOnlinePlayersSnapshot();
+		for (int i = 0; i < onlinePlayers.size(); i++) {
+			this.sendSnapshot(onlinePlayers.get(i));
 		}
 	}
 
@@ -421,9 +420,9 @@ public class VoiceChatRoomManager {
 			return;
 		}
 		Packet64Voice outbound = inbound.cloneForForwarding(speaker.id, 0.0F, speaker.name);
-		for(Object obj : this.server.serverConfigurationManager.players) {
-			if(!(obj instanceof EntityPlayer)) continue;
-			EntityPlayer member = (EntityPlayer)obj;
+		List<EntityPlayer> onlinePlayers = this.server.serverConfigurationManager.getOnlinePlayersSnapshot();
+		for (int i = 0; i < onlinePlayers.size(); i++) {
+			EntityPlayer member = onlinePlayers.get(i);
 			if(member == speaker) continue;
 			if(room.members.contains(member.name.toLowerCase(Locale.ROOT))) {
 				member.netServerHandler.sendPacket(outbound);

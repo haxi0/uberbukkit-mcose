@@ -1,6 +1,7 @@
 package uk.betacraft.uberbukkit.alpha.inventory;
 
 import net.minecraft.server.EntityHuman;
+import net.minecraft.server.Block;
 import net.minecraft.server.Item;
 import net.minecraft.server.ItemArmor;
 import net.minecraft.server.ItemStack;
@@ -76,11 +77,16 @@ public class ProcessPacket5 {
                 } else if (client != null && serverside == null) {
                     // check if they can put the item in this armor slot
                     if (packet.a == -3) {
-                        Item item = Item.byId[client.id];
+                        Item item = client.id >= 0 && client.id < Item.byId.length ? Item.byId[client.id] : null;
                         if (item != null && item instanceof ItemArmor) {
                             int fit = ((ItemArmor) item).bk;
                             if ((i == 0 && fit != 3) || (i == 1 && fit != 2) || (i == 2 && fit != 1) || (i == 3 && fit != 0)) {
                                 if (debug) System.out.println("Armor slot " + i + " but item is at " + fit);
+                                return;
+                            }
+                        } else if (client.id == Block.PUMPKIN.id) {
+                            if (i != 3) {
+                                if (debug) System.out.println("Pumpkin can only fit helmet slot, got armor slot " + i);
                                 return;
                             }
                         } else return;

@@ -13,20 +13,24 @@ class NetworkAcceptThread extends Thread {
 
     final NetworkListenThread b;
     
-    // Connection rate limiting - configurable to allow clients that ping then connect
-    // Default 1000ms (1 second) - enough to prevent spam but allows poll+connect flow
+    // Connection rate limiting - configurable to allow clients that ping then connect.
+    // Disabled by default; can be enabled to mitigate spam without breaking normal joins.
     private final long connectionThrottleMs;
+    private final int connectionThrottleBurst;
 
     NetworkAcceptThread(NetworkListenThread networklistenthread, String s, MinecraftServer minecraftserver) {
         super(s);
         this.b = networklistenthread;
         this.a = minecraftserver;
-        // Load from config, default to 1000ms (was hardcoded 5000ms which broke clients)
-        this.connectionThrottleMs = (long) PoseidonConfig.getInstance().getInt("settings.connection-throttle-ms.value", 1000);
+        // Keep throttle disabled by default unless explicitly enabled in config.
+        this.connectionThrottleMs = (long) PoseidonConfig.getInstance().getInt("settings.connection-throttle-ms.value", 0);
+        // Allow a small burst within the throttle window so multiple players behind one NAT
+        // can still join together without tripping the limiter.
+        this.connectionThrottleBurst = Math.max(1, PoseidonConfig.getInstance().getInt("settings.connection-throttle-ms.burst", 4));
     }
 
     public void run() {
-        HashMap hashmap = new HashMap();
+        HashMap<InetAddress, ThrottleWindow> throttleByAddress = new HashMap<InetAddress, ThrottleWindow>();
 
         while (this.b.b) {
             try {
@@ -34,17 +38,32 @@ class NetworkAcceptThread extends Thread {
 
                 if (socket != null) {
                     InetAddress inetaddress = socket.getInetAddress();
+                    long now = System.currentTimeMillis();
+                    String hostAddress = inetaddress.getHostAddress();
+                    boolean localhost = "127.0.0.1".equals(hostAddress) || "::1".equals(hostAddress) || "0:0:0:0:0:0:0:1".equals(hostAddress);
+                    boolean throttleTriggered = false;
 
                     // Rate limit connections per IP (except localhost)
                     // This prevents connection spam but allows normal client behavior
                     // (clients ping the server list, then connect shortly after)
-                    if (connectionThrottleMs > 0 && hashmap.containsKey(inetaddress) && !"127.0.0.1".equals(inetaddress.getHostAddress()) && System.currentTimeMillis() - ((Long) hashmap.get(inetaddress)).longValue() < connectionThrottleMs) {
-                        hashmap.put(inetaddress, Long.valueOf(System.currentTimeMillis()));
+                    if (this.connectionThrottleMs > 0L && !localhost) {
+                        ThrottleWindow throttleWindow = throttleByAddress.get(inetaddress);
+                        if (throttleWindow == null || now - throttleWindow.windowStartMs >= this.connectionThrottleMs) {
+                            throttleWindow = new ThrottleWindow(now);
+                            throttleByAddress.put(inetaddress, throttleWindow);
+                        } else {
+                            ++throttleWindow.attempts;
+                        }
+
+                        if (throttleWindow.attempts > this.connectionThrottleBurst) {
+                            throttleTriggered = true;
+                        }
+                    }
+
+                    if (throttleTriggered) {
                         socket.close();
                     } else {
-                        hashmap.put(inetaddress, Long.valueOf(System.currentTimeMillis()));
                         NetLoginHandler netloginhandler = new NetLoginHandler(this.a, socket, "Connection #" + NetworkListenThread.b(this.b));
-
                         NetworkListenThread.a(this.b, netloginhandler);
                     }
                 }
@@ -55,6 +74,16 @@ class NetworkAcceptThread extends Thread {
                 }
                 // If b.b is false, socket was closed for shutdown - exit gracefully
             }
+        }
+    }
+
+    private static final class ThrottleWindow {
+        final long windowStartMs;
+        int attempts;
+
+        ThrottleWindow(long windowStartMs) {
+            this.windowStartMs = windowStartMs;
+            this.attempts = 1;
         }
     }
 }

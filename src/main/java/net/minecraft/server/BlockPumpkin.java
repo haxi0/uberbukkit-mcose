@@ -81,7 +81,12 @@ public class BlockPumpkin extends Block {
     }
 
     protected int a_(int i) {
-        return this.id == Block.PUMPKIN.id ? 1 : super.a_(i);
+        // Legacy pumpkin block (id 86) stores carved/plain state in metadata:
+        // 0..3 = carved (facing), 4+ = plain.
+        if (this.id == Block.PUMPKIN.id) {
+            return i > 3 ? 1 : 0;
+        }
+        return super.a_(i);
     }
 
     private void removeAdjacentStem(World world, int i, int j, int k) {

@@ -81,6 +81,16 @@ public class PoseidonConfig extends Configuration {
         generateConfigOption("settings.uuid-fetcher.allow-graceful-uuids.value", true);
         generateConfigOption("settings.uuid-fetcher.allow-graceful-uuids.info", "This setting means offline UUIDs are generated for players who don't have a Mojang UUID. This is useful for cracked or semi-cracked servers.");
 
+        // Session authentication retry controls
+        generateConfigOption("settings.authentication.session.max-attempts", 3);
+        generateConfigOption("settings.authentication.session.max-attempts-info", "Maximum modern session verification attempts per login before failing authentication.");
+        generateConfigOption("settings.authentication.session.retry-delay-ms", 250);
+        generateConfigOption("settings.authentication.session.retry-delay-ms-info", "Base delay in milliseconds before retrying modern session verification after transient failures.");
+        generateConfigOption("settings.authentication.session.max-retry-delay-ms", 1000);
+        generateConfigOption("settings.authentication.session.max-retry-delay-ms-info", "Upper bound in milliseconds for exponential authentication retry backoff.");
+        generateConfigOption("settings.authentication.session.parallel-no-ip-fallback", true);
+        generateConfigOption("settings.authentication.session.parallel-no-ip-fallback-info", "If enabled, authentication may perform a no-IP hasJoined fallback when the primary lookup is inconclusive or transiently failing.");
+
         generateConfigOption("settings.remove-join-leave-debug", true);
         generateConfigOption("settings.enable-tpc-nodelay", true);
         generateConfigOption("settings.enable-tcp-nodelay", true);
@@ -122,6 +132,8 @@ public class PoseidonConfig extends Configuration {
         // Connection throttling - prevents rapid connections from same IP
         generateConfigOption("settings.connection-throttle-ms.value", 0);
         generateConfigOption("settings.connection-throttle-ms.info", "Minimum milliseconds between connections from the same IP. Set to 0 to disable (default). Only increase if you're experiencing connection spam attacks.");
+        generateConfigOption("settings.connection-throttle-ms.burst", 4);
+        generateConfigOption("settings.connection-throttle-ms.burst-info", "How many connections from one IP are allowed within the throttle window before newer attempts are rejected.");
 
         //Statistics
         generateConfigOption("settings.statistics.key", UUID.randomUUID().toString());

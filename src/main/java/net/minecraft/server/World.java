@@ -1000,6 +1000,10 @@ public class World implements IBlockAccess {
         }
     }
 
+    public BlockStateKey getBlockStateKey(int i, int j, int k) {
+        return BlockStateBridge.fromLegacy(this.getTypeId(i, j, k), this.getData(i, j, k));
+    }
+
     public void setData(int i, int j, int k, int l) {
         if (this.setRawData(i, j, k, l)) {
             int i1 = this.getTypeId(i, j, k);
@@ -1072,6 +1076,22 @@ public class World implements IBlockAccess {
             return false;
         }
         // CraftBukkit end
+    }
+
+    public boolean setBlockState(int i, int j, int k, BlockStateKey stateKey) {
+        BlockStateBridge.LegacyBlockData legacy = BlockStateBridge.toLegacy(stateKey);
+        if (legacy.fallbackUsed) {
+            System.err.println("[BlockState] nearest legacy fallback projection at " + i + "," + j + "," + k + " for " + stateKey);
+        }
+        return this.setRawTypeIdAndData(i, j, k, legacy.blockId, legacy.metadata);
+    }
+
+    public boolean setBlockStateAndData(int i, int j, int k, BlockStateKey stateKey) {
+        BlockStateBridge.LegacyBlockData legacy = BlockStateBridge.toLegacy(stateKey);
+        if (legacy.fallbackUsed) {
+            System.err.println("[BlockState] nearest legacy fallback projection at " + i + "," + j + "," + k + " for " + stateKey);
+        }
+        return this.setTypeIdAndData(i, j, k, legacy.blockId, legacy.metadata);
     }
 
     public void notify(int i, int j, int k) {
@@ -2572,6 +2592,34 @@ public class World implements IBlockAccess {
     }
 
     private void x() {
+        int terrainType = this.worldData != null ? this.worldData.getTerrainType() : 0;
+        boolean isOverworld = (this.worldProvider != null && this.worldProvider.dimension == 0);
+        boolean forceInfdevClear = isOverworld && terrainType == 7;
+        boolean forceAlphaSnow = isOverworld && (terrainType == 5 || (terrainType == 1 && this.worldData != null && this.worldData.isSnowWorld()));
+        if (forceInfdevClear) {
+            this.worldData.setStorm(false);
+            this.worldData.setWeatherDuration(0);
+            this.worldData.setThundering(false);
+            this.worldData.setThunderDuration(0);
+            this.i = 0.0F;
+            this.j = 0.0F;
+            this.k = 0.0F;
+            this.l = 0.0F;
+            return;
+        }
+
+        if (forceAlphaSnow) {
+            this.worldData.setStorm(true);
+            this.worldData.setWeatherDuration(Integer.MAX_VALUE / 2);
+            this.worldData.setThundering(false);
+            this.worldData.setThunderDuration(0);
+            this.i = 1.0F;
+            this.j = 1.0F;
+            this.k = 0.0F;
+            this.l = 0.0F;
+            return;
+        }
+
         if (this.worldData.hasStorm()) {
             this.j = 1.0F;
             if (this.worldData.isThundering()) {
@@ -2585,20 +2633,34 @@ public class World implements IBlockAccess {
 			// Alpha/Alpha Snow parity: enforce perpetual weather states to match client
 			int terrainType = this.worldData != null ? this.worldData.getTerrainType() : 0;
 			boolean isOverworld = (this.worldProvider != null && this.worldProvider.dimension == 0);
-			boolean isAlphaSnowWorld = isOverworld && (terrainType == 5 || (this.worldData != null && this.worldData.isSnowWorld()));
+			boolean isInfdevWorld = isOverworld && terrainType == 7;
+			boolean isAlphaSnowWorld = isOverworld && (terrainType == 5 || (terrainType == 1 && this.worldData != null && this.worldData.isSnowWorld()));
 			boolean isAlphaNormalWorld = isOverworld && (terrainType == 1 && (this.worldData == null || !this.worldData.isSnowWorld()));
 
+			if (isInfdevWorld) {
+				// INFDEV is strict clear-weather mode.
+				this.worldData.setStorm(false);
+				this.worldData.setWeatherDuration(0);
+				this.worldData.setThundering(false);
+				this.worldData.setThunderDuration(0);
+				this.i = this.j;
+				this.j = (float) Math.max(0.0D, (double) this.j - 0.01D);
+				this.k = this.l;
+				this.l = (float) Math.max(0.0D, (double) this.l - 0.01D);
+				return;
+			}
+
 			if (isAlphaSnowWorld) {
-				// Force endless snowfall (no thunder) so snow layers/ice form consistently server-side
+				// Force endless snowfall (no thunder) so ALPHA_SNOW has zero chance of clear weather.
 				this.worldData.setStorm(true);
 				this.worldData.setWeatherDuration(Integer.MAX_VALUE / 2);
 				this.worldData.setThundering(false);
 				this.worldData.setThunderDuration(0);
-				// Smoothly ramp rain on, thunder off
+				// Keep rain fully on every tick so this.v() always stays true (no transient clear state).
 				this.i = this.j;
-				this.j = (float) Math.min(1.0D, (double) this.j + 0.01D);
+				this.j = 1.0F;
 				this.k = this.l;
-				this.l = (float) Math.max(0.0D, (double) this.l - 0.01D);
+				this.l = 0.0F;
 				return; // Skip vanilla toggling logic
 			}
 
@@ -2701,6 +2763,35 @@ public class World implements IBlockAccess {
     }
 
     private void y() {
+        int terrainType = this.worldData != null ? this.worldData.getTerrainType() : 0;
+        boolean isOverworld = (this.worldProvider != null && this.worldProvider.dimension == 0);
+        boolean forceInfdevClear = isOverworld && terrainType == 7;
+        boolean forceAlphaSnow = isOverworld && (terrainType == 5 || (terrainType == 1 && this.worldData != null && this.worldData.isSnowWorld()));
+        if (forceInfdevClear) {
+            this.worldData.setWeatherDuration(0);
+            this.worldData.setStorm(false);
+            this.worldData.setThunderDuration(0);
+            this.worldData.setThundering(false);
+            this.i = 0.0F;
+            this.j = 0.0F;
+            this.k = 0.0F;
+            this.l = 0.0F;
+            return;
+        }
+
+        if (forceAlphaSnow) {
+            // Sleeping should not clear weather in ALPHA_SNOW worlds.
+            this.worldData.setWeatherDuration(Integer.MAX_VALUE / 2);
+            this.worldData.setStorm(true);
+            this.worldData.setThunderDuration(0);
+            this.worldData.setThundering(false);
+            this.i = 1.0F;
+            this.j = 1.0F;
+            this.k = 0.0F;
+            this.l = 0.0F;
+            return;
+        }
+
         // CraftBukkit start
         WeatherChangeEvent weather = new WeatherChangeEvent(this.getWorld(), false);
         this.getServer().getPluginManager().callEvent(weather);
@@ -3415,11 +3506,21 @@ public class World implements IBlockAccess {
         return this.i + (this.j - this.i) * f;
     }
 
+    private boolean isInfdevTerrainWorld() {
+        return this.worldData != null && this.worldData.getTerrainType() == 7;
+    }
+
     public boolean u() {
+        if (this.isInfdevTerrainWorld()) {
+            return false;
+        }
         return (double) this.c(1.0F) > 0.9D;
     }
 
     public boolean v() {
+        if (this.isInfdevTerrainWorld()) {
+            return false;
+        }
         return (double) this.d(1.0F) > 0.2D;
     }
 

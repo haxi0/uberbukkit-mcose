@@ -23,6 +23,17 @@ public class Packet107CreativeSetSlot extends Packet {
         this.itemStack = stack;
     }
 
+    private static int normalizeIncomingCreativeItemId(int itemId) {
+        if (itemId == 150 && Block.FENCE_GATE != null) {
+            return Block.FENCE_GATE.id;
+        }
+        return itemId;
+    }
+
+    private static boolean isRegisteredItemId(int itemId) {
+        return itemId >= 0 && itemId < Item.byId.length && Item.byId[itemId] != null;
+    }
+
     public void a(DataInputStream datainputstream) throws IOException {
         this.slot = datainputstream.readShort();
         
@@ -31,7 +42,12 @@ public class Packet107CreativeSetSlot extends Packet {
         if (itemId >= 0) {
             byte count = datainputstream.readByte();
             short damage = datainputstream.readShort();
-            this.itemStack = new ItemStack(itemId, count, damage);
+            int normalizedId = normalizeIncomingCreativeItemId(itemId);
+            if (isRegisteredItemId(normalizedId)) {
+                this.itemStack = new ItemStack(normalizedId, count, damage);
+            } else {
+                this.itemStack = null;
+            }
             
             // Read NBT data if present (MCOSE protocol extension, pvn >= 14)
             if (this.pvn >= 14) {
@@ -45,7 +61,7 @@ public class Packet107CreativeSetSlot extends Packet {
                         DataInputStream nbtIn = new DataInputStream(gzis);
                         NBTBase nbtBase = NBTBase.b(nbtIn);
                         nbtIn.close();
-                        if (nbtBase instanceof NBTTagCompound) {
+                        if (this.itemStack != null && nbtBase instanceof NBTTagCompound) {
                             this.itemStack.tag = (NBTTagCompound) nbtBase;
                         }
                     } catch (Exception e) {
@@ -99,5 +115,4 @@ public class Packet107CreativeSetSlot extends Packet {
         return 4;
     }
 }
-
 

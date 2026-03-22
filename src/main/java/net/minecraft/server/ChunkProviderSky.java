@@ -23,9 +23,27 @@ public class ChunkProviderSky implements IChunkProvider {
     private static final int SKY_LAPIS_Y_SPAN = 24;
     private static final int SKY_ORE_SAMPLE_XZ_STEP = 2;
     private static final int SKY_ORE_SAMPLE_Y_STEP = 8;
-    private static final int SKY_PUMPKIN_BASE_CHANCE = 64;
-    private static final int SKY_PUMPKIN_MIN_CHANCE = 12;
-    private static final int SKY_PUMPKIN_CHANCE_ROLLS = 2;
+    private static final int SKY_FOREST_EXTRA_POND_ATTEMPTS_MIN = 1;
+    private static final int SKY_FOREST_EXTRA_POND_ATTEMPTS_VARIATION = 2;
+    private static final int SKY_FOREST_EXTRA_WATERFALL_ATTEMPTS = 28;
+    private static final int SKY_FOREST_POND_SURFACE_OFFSET = 3;
+    private static final int SKY_FOREST_WATERFALL_DEPTH_RANGE = 20;
+    private static final int SKY_FOREST_MIN_WATER_FEATURE_Y = 24;
+    private static final int SKY_FOREST_EXTRA_REED_ATTEMPTS = 8;
+    private static final int SKY_FOREST_CASCADE_CHANCE = 3;
+    private static final int SKY_FOREST_CASCADE_ATTEMPTS = 3;
+    private static final int SKY_FOREST_CASCADE_MIN_DROP = 12;
+    private static final int SKY_FOREST_CASCADE_LOWER_OFFSET = 7;
+    private static final double SKY_ISLAND_RADIUS_BIAS = 0.2D;
+    private static final double SKY_ISLAND_DENSITY_BIAS = 1.25D;
+    private static final double SKY_VERTICAL_PINCH_STRENGTH = 0.38D;
+    private static final double SKY_UNDERSIDE_CARVE_BASE = 1.05D;
+    private static final double SKY_UNDERSIDE_CARVE_MASK_SCALE = 1.5D;
+    private static final double SKY_UNDERSIDE_TAPER_STRENGTH = 40.0D;
+    private static final double SKY_UNDERSIDE_SPIKE_STRENGTH = 52.0D;
+    private static final double SKY_UNDERSIDE_NECK_STRENGTH = 14.0D;
+    private static final double SKY_TOP_SHRINK_STRENGTH = 3.5D;
+    private static final double SKY_SPIKE_MASK_MIN = 0.1D;
 
     private Random j;
     private NoiseGeneratorOctaves k;
@@ -49,6 +67,7 @@ public class ChunkProviderSky implements IChunkProvider {
     double[] g;
     double[] h;
     int[][] i = new int[32][32];
+    private double[] x = new double[256];
     private double[] w;
 
     public ChunkProviderSky(World world, long i) {
@@ -69,6 +88,9 @@ public class ChunkProviderSky implements IChunkProvider {
         int k = b0 + 1;
         byte b1 = 33;
         int l = b0 + 1;
+        double d17 = 1.0D / 18.0D;
+
+        this.x = this.c.a(this.x, (double) (i * 16), (double) (j * 16), 0.0D, 16, 16, 1, d17, d17, 1.0D);
 
         this.q = this.a(this.q, i * b0, 0, j * b0, k, b1, l);
 
@@ -100,9 +122,24 @@ public class ChunkProviderSky implements IChunkProvider {
                             double d16 = (d11 - d10) * d14;
 
                             for (int k2 = 0; k2 < 8; ++k2) {
-                                int l2 = 0;
+                                int localX = i1 * 8 + i2;
+                                int localY = k1 * 4 + l1;
+                                int localZ = j1 * 8 + k2;
+                                double spikeMask = this.x[localX + localZ * 16] * 0.5D + 0.5D;
+                                if (spikeMask < 0.0D) {
+                                    spikeMask = 0.0D;
+                                } else if (spikeMask > 1.0D) {
+                                    spikeMask = 1.0D;
+                                }
 
-                                if (d15 > 0.0D) {
+                                double stoneThreshold = 0.0D;
+                                if (localY < 64) {
+                                    double undersideDepth = (64.0D - (double) localY) / 64.0D;
+                                    stoneThreshold = undersideDepth * (SKY_UNDERSIDE_CARVE_BASE - spikeMask * SKY_UNDERSIDE_CARVE_MASK_SCALE);
+                                }
+
+                                int l2 = 0;
+                                if (d15 > stoneThreshold) {
                                     l2 = Block.STONE.id;
                                 }
 
@@ -139,6 +176,9 @@ public class ChunkProviderSky implements IChunkProvider {
                 int j1 = -1;
                 byte b0 = biomebase.p;
                 byte b1 = biomebase.q;
+                if (biomebase == BiomeBase.DESERT) {
+                    b1 = (byte) Block.STONE.id;
+                }
 
                 for (int k1 = 127; k1 >= 0; --k1) {
                     int l1 = (l * 16 + k) * 128 + k1;
@@ -238,20 +278,30 @@ public class ChunkProviderSky implements IChunkProvider {
                 }
 
                 d6 = d6 * 3.0D - 2.0D;
-                if (d6 > 1.0D) {
-                    d6 = 1.0D;
+                if (d6 < 0.0D) {
+                    d6 /= 2.0D;
+                    if (d6 < -1.0D) {
+                        d6 = -1.0D;
+                    }
+
+                    d6 /= 1.4D;
+                    d6 /= 2.0D;
+                } else {
+                    if (d6 > 1.0D) {
+                        d6 = 1.0D;
+                    }
+
+                    d6 /= 8.0D;
                 }
 
-                d6 /= 8.0D;
-                d6 = 0.0D;
                 if (d5 < 0.0D) {
                     d5 = 0.0D;
                 }
 
-                d5 += 0.5D;
+                d5 += 0.5D + SKY_ISLAND_RADIUS_BIAS;
                 d6 = d6 * (double) i1 / 16.0D;
                 ++l1;
-                double d7 = (double) i1 / 2.0D;
+                double d7 = (double) i1 / 2.0D + d6 * 4.0D;
 
                 for (int j3 = 0; j3 < i1; ++j3) {
                     double d8 = 0.0D;
@@ -274,6 +324,23 @@ public class ChunkProviderSky implements IChunkProvider {
                     }
 
                     d8 -= 8.0D;
+                    d8 += SKY_ISLAND_DENSITY_BIAS;
+                    d8 -= d9 * SKY_VERTICAL_PINCH_STRENGTH;
+                    if ((double) j3 < d7) {
+                        double d14 = (d7 - (double) j3) / d7;
+                        double d15 = 1.15D - d12;
+                        if (d15 < SKY_SPIKE_MASK_MIN) {
+                            d15 = SKY_SPIKE_MASK_MIN;
+                        }
+
+                        d8 -= d14 * d14 * SKY_UNDERSIDE_TAPER_STRENGTH * d15;
+                        d8 -= d14 * SKY_UNDERSIDE_NECK_STRENGTH;
+                        d8 += d14 * d14 * d14 * d14 * SKY_UNDERSIDE_SPIKE_STRENGTH * d12 * d12;
+                    } else {
+                        double d14 = ((double) j3 - d7) / ((double) i1 - d7);
+                        d8 -= d14 * d14 * SKY_TOP_SHRINK_STRENGTH;
+                    }
+
                     byte b0 = 32;
                     double d13;
 
@@ -303,6 +370,121 @@ public class ChunkProviderSky implements IChunkProvider {
 
     private boolean isTundraLikeSkyBiome(BiomeBase biomebase) {
         return biomebase == BiomeBase.TUNDRA || biomebase == BiomeBase.ICE_DESERT;
+    }
+
+    private boolean isForestySkyBiome(BiomeBase biomebase) {
+        return biomebase == BiomeBase.FOREST
+                || biomebase == BiomeBase.RAINFOREST
+                || biomebase == BiomeBase.SEASONAL_FOREST
+                || biomebase == BiomeBase.TAIGA;
+    }
+
+    private boolean isSolidBlock(int i, int j, int k) {
+        int l = this.p.getTypeId(i, j, k);
+        if (l <= 0 || l >= Block.byId.length) {
+            return false;
+        }
+
+        Block block = Block.byId[l];
+        return block != null && block.material.isSolid();
+    }
+
+    private int findSkySurfaceY(int i, int j, int k) {
+        int l = Math.min(k, 126);
+        for (int i1 = l; i1 >= 2; --i1) {
+            if (this.isSolidBlock(i, i1, j) && this.p.isEmpty(i, i1 + 1, j) && this.p.isEmpty(i, i1 + 2, j)) {
+                return i1;
+            }
+        }
+
+        return -1;
+    }
+
+    private boolean generateForestySkyCascadeFeature(int i, int j) {
+        int k = i + this.j.nextInt(16) + 8;
+        int l = j + this.j.nextInt(16) + 8;
+        int i1 = this.findSkySurfaceY(k, l, 126);
+        if (i1 < SKY_FOREST_MIN_WATER_FEATURE_Y + SKY_FOREST_CASCADE_MIN_DROP + 6) {
+            return false;
+        }
+
+        int j1 = this.findSkySurfaceY(k, l, i1 - SKY_FOREST_CASCADE_MIN_DROP);
+        if (j1 < SKY_FOREST_MIN_WATER_FEATURE_Y) {
+            return false;
+        }
+
+        int k1 = k + this.j.nextInt(SKY_FOREST_CASCADE_LOWER_OFFSET) - this.j.nextInt(SKY_FOREST_CASCADE_LOWER_OFFSET);
+        int l1 = l + this.j.nextInt(SKY_FOREST_CASCADE_LOWER_OFFSET) - this.j.nextInt(SKY_FOREST_CASCADE_LOWER_OFFSET);
+        int i2 = this.findSkySurfaceY(k1, l1, i1 - SKY_FOREST_CASCADE_MIN_DROP);
+        if (i2 >= SKY_FOREST_MIN_WATER_FEATURE_Y && i1 - i2 >= SKY_FOREST_CASCADE_MIN_DROP) {
+            j1 = i2;
+        } else {
+            k1 = k;
+            l1 = l;
+        }
+
+        if (i1 - j1 < SKY_FOREST_CASCADE_MIN_DROP) {
+            return false;
+        }
+
+        int j2 = i1 - 1 - this.j.nextInt(2);
+        int k2 = j1 - 1;
+        if (j2 <= k2 + 5) {
+            return false;
+        }
+
+        (new WorldGenLakes(Block.STATIONARY_WATER.id)).a(this.p, this.j, k, j2, l);
+        (new WorldGenLakes(Block.STATIONARY_WATER.id)).a(this.p, this.j, k1, k2, l1);
+
+        int l2 = Integer.compare(k1, k);
+        int i3 = Integer.compare(l1, l);
+        int j3 = k + l2;
+        int k3 = l + i3;
+        int l3 = i1 + 1;
+        if (!this.p.isEmpty(j3, l3, k3)) {
+            j3 = k;
+            k3 = l;
+        }
+
+        if (this.p.isEmpty(j3, l3, k3)) {
+            this.p.setTypeId(j3, l3, k3, Block.WATER.id);
+        }
+
+        return true;
+    }
+
+    private void generateForestySkyWaterFeatures(int i, int j) {
+        int k = SKY_FOREST_EXTRA_POND_ATTEMPTS_MIN + this.j.nextInt(SKY_FOREST_EXTRA_POND_ATTEMPTS_VARIATION);
+
+        int l;
+        int i1;
+        int j1;
+        int k1;
+        for (l = 0; l < k; ++l) {
+            i1 = i + this.j.nextInt(16) + 8;
+            j1 = j + this.j.nextInt(16) + 8;
+            k1 = this.p.getHighestBlockYAt(i1, j1) - this.j.nextInt(SKY_FOREST_POND_SURFACE_OFFSET) - 1;
+            if (k1 > SKY_FOREST_MIN_WATER_FEATURE_Y && k1 < 124) {
+                (new WorldGenLakes(Block.STATIONARY_WATER.id)).a(this.p, this.j, i1, k1, j1);
+            }
+        }
+
+        for (l = 0; l < SKY_FOREST_EXTRA_WATERFALL_ATTEMPTS; ++l) {
+            i1 = i + this.j.nextInt(16) + 8;
+            j1 = j + this.j.nextInt(16) + 8;
+            k1 = this.p.getHighestBlockYAt(i1, j1) - this.j.nextInt(SKY_FOREST_WATERFALL_DEPTH_RANGE);
+            if (k1 > SKY_FOREST_MIN_WATER_FEATURE_Y) {
+                (new WorldGenLiquids(Block.WATER.id)).a(this.p, this.j, i1, k1, j1);
+            }
+        }
+
+        if (this.j.nextInt(SKY_FOREST_CASCADE_CHANCE) == 0) {
+            for (l = 0; l < SKY_FOREST_CASCADE_ATTEMPTS; ++l) {
+                if (this.generateForestySkyCascadeFeature(i, j)) {
+                    break;
+                }
+            }
+        }
     }
 
     private int getSkyExtraTreeAttemptsForBiome(BiomeBase biomebase) {
@@ -368,27 +550,6 @@ public class ChunkProviderSky implements IChunkProvider {
         return Math.max(i, (int) Math.round((double) i * d1));
     }
 
-    private int getSkyPumpkinPatchAttempts(double d0) {
-        double d1 = SKY_BASE_STONE_DENSITY / Math.max(d0, SKY_MIN_STONE_DENSITY);
-
-        if (d1 < 1.0D) {
-            d1 = 1.0D;
-        } else if (d1 > SKY_MAX_ORE_SCALE) {
-            d1 = SKY_MAX_ORE_SCALE;
-        }
-
-        int i = Math.max(SKY_PUMPKIN_MIN_CHANCE, (int) Math.round((double) SKY_PUMPKIN_BASE_CHANCE / d1));
-        int j = 0;
-
-        for (int k = 0; k < SKY_PUMPKIN_CHANCE_ROLLS; ++k) {
-            if (this.j.nextInt(i) == 0) {
-                ++j;
-            }
-        }
-
-        return j;
-    }
-
     public void getChunkAt(IChunkProvider ichunkprovider, int i, int j) {
         BlockSand.instaFall = true;
         int k = i * 16;
@@ -419,6 +580,10 @@ public class ChunkProviderSky implements IChunkProvider {
             if (l1 < 64 || this.j.nextInt(10) == 0) {
                 (new WorldGenLakes(Block.STATIONARY_LAVA.id)).a(this.p, this.j, k1, l1, i2);
             }
+        }
+
+        if (this.isForestySkyBiome(biomebase)) {
+            this.generateForestySkyWaterFeatures(k, l);
         }
 
         double skyStoneDensity = this.getSkyStoneDensityForChunk(k, l);
@@ -600,21 +765,20 @@ public class ChunkProviderSky implements IChunkProvider {
             (new WorldGenReed()).a(this.p, this.j, j2, k2, l2);
         }
 
-        for (i2 = 0; i2 < this.getSkyPumpkinPatchAttempts(skyStoneDensity); ++i2) {
-            j2 = k + this.j.nextInt(16) + 8;
+        if (this.isForestySkyBiome(biomebase)) {
+            for (i2 = 0; i2 < SKY_FOREST_EXTRA_REED_ATTEMPTS; ++i2) {
+                j2 = k + this.j.nextInt(16) + 8;
+                l2 = l + this.j.nextInt(16) + 8;
+                k2 = this.p.getHighestBlockYAt(j2, l2) - this.j.nextInt(8);
+                (new WorldGenReed()).a(this.p, this.j, j2, k2, l2);
+            }
+        }
+
+        if (this.j.nextInt(32) == 0) {
+            i2 = k + this.j.nextInt(16) + 8;
+            j2 = this.j.nextInt(128);
             k2 = l + this.j.nextInt(16) + 8;
-            l2 = this.p.getHighestBlockYAt(j2, k2);
-
-            while (l2 > 1 && !this.p.getMaterial(j2, l2 - 1, k2).isSolid()) {
-                --l2;
-            }
-
-            if (l2 > 1) {
-                int groundBlockId = this.p.getTypeId(j2, l2 - 1, k2);
-                if (groundBlockId == Block.GRASS.id || groundBlockId == Block.DIRT.id) {
-                    (new WorldGenPumpkin()).a(this.p, this.j, j2, l2, k2);
-                }
-            }
+            (new WorldGenPumpkin()).a(this.p, this.j, i2, j2, k2);
         }
 
         i2 = 0;

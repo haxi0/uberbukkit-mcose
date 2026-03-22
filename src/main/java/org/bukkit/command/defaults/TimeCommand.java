@@ -10,7 +10,7 @@ public class TimeCommand extends VanillaCommand {
     public TimeCommand() {
         super("time");
         this.description = "Changes the time on each world";
-        this.usageMessage = "/time set <value|day|noon|night|midnight>\n/time add <value>";
+        this.usageMessage = "/time set <value|sunrise|day|noon|sunset|night|midnight>\n/time add <value>";
     }
 
     @Override
@@ -63,8 +63,10 @@ public class TimeCommand extends VanillaCommand {
     }
 
     private Long parseNamedTime(String name) {
+        if (name.equalsIgnoreCase("sunrise")) return 0L;     // first light
         if (name.equalsIgnoreCase("day")) return 1000L;       // sunrise-ish
         if (name.equalsIgnoreCase("noon")) return 6000L;      // midday
+        if (name.equalsIgnoreCase("sunset")) return 12000L;   // dusk
         if (name.equalsIgnoreCase("night")) return 13000L;    // sunset-ish
         if (name.equalsIgnoreCase("midnight")) return 18000L; // midnight
         return null;

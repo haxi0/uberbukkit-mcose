@@ -13,24 +13,13 @@ class NetworkReaderThread extends Thread {
     }
 
     public void run() {
-        Object object = NetworkManager.a;
-
         synchronized (NetworkManager.a) {
             ++NetworkManager.b;
         }
 
-        while (true) {
-            boolean flag = false;
-
-            try {
-                flag = true;
-                if (!NetworkManager.a(this.a)) {
-                    flag = false;
-                    break;
-                }
-
+        try {
+            while (NetworkManager.a(this.a)) {
                 if (NetworkManager.b(this.a)) {
-                    flag = false;
                     break;
                 }
 
@@ -43,20 +32,11 @@ class NetworkReaderThread extends Thread {
                 } catch (InterruptedException interruptedexception) {
                     ;
                 }
-            } finally {
-                if (flag) {
-                    Object object1 = NetworkManager.a;
-
-                    synchronized (NetworkManager.a) {
-                        --NetworkManager.b;
-                    }
-                }
             }
-        }
-
-        object = NetworkManager.a;
-        synchronized (NetworkManager.a) {
-            --NetworkManager.b;
+        } finally {
+            synchronized (NetworkManager.a) {
+                --NetworkManager.b;
+            }
         }
     }
 }

@@ -21,6 +21,8 @@ import java.util.*;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Server GUI for Uberbukkit/MCOSE server.
@@ -28,6 +30,8 @@ import java.util.logging.*;
  */
 public class ServerGUI extends JFrame {
     private static final long serialVersionUID = 1L;
+    private static final Pattern CONSOLE_FORMATTED_LINE_PATTERN =
+        Pattern.compile("^\\d{2}:\\d{2}:\\d{2} \\[([A-Z]+)\\] (.*)$");
     
     // Colors - Dark theme
     private static final Color BG_DARK = new Color(30, 30, 30);
@@ -57,6 +61,8 @@ public class ServerGUI extends JFrame {
     private JTabbedPane tabbedPane;
     private JTextPane consolePane;
     private StyledDocument consoleDoc;
+    private JTextPane chatLogPane;
+    private StyledDocument chatLogDoc;
     private JTextField commandInput;
     private JComboBox<String> filterCombo;
     private JList<String> playerList;
@@ -127,7 +133,8 @@ public class ServerGUI extends JFrame {
     private JButton saveStartupReadinessButton;
     
     // Log storage for filtering
-    private List<LogEntry> allLogs = new ArrayList<>();
+    private final List<LogEntry> allLogs = Collections.synchronizedList(new ArrayList<LogEntry>());
+    private final List<LogEntry> chatOnlyLogs = Collections.synchronizedList(new ArrayList<LogEntry>());
     private String currentFilter = "All";
     
     // Server reference
@@ -230,6 +237,9 @@ public class ServerGUI extends JFrame {
         
         // Console tab
         tabbedPane.addTab("Console", createConsolePanel());
+
+        // Chat-only tab
+        tabbedPane.addTab("Chat Logs", createChatLogsPanel());
         
         // Players tab
         tabbedPane.addTab("Players", createPlayersPanel());
@@ -507,6 +517,46 @@ public class ServerGUI extends JFrame {
         
         panel.add(inputPanel, BorderLayout.SOUTH);
         
+        return panel;
+    }
+
+    private JPanel createChatLogsPanel() {
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBackground(BG_PANEL);
+        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+        JPanel topBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        topBar.setBackground(BG_PANEL);
+
+        JLabel title = new JLabel("Chat stream only");
+        title.setForeground(CHAT_COLOR);
+        title.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        topBar.add(title);
+
+        JButton clearButton = new JButton("Clear Chat Logs");
+        styleButton(clearButton, BG_INPUT, TEXT_COLOR);
+        clearButton.addActionListener(e -> {
+            chatOnlyLogs.clear();
+            refreshChatLogConsole();
+        });
+        topBar.add(clearButton);
+
+        panel.add(topBar, BorderLayout.NORTH);
+
+        chatLogPane = new JTextPane();
+        chatLogPane.setEditable(false);
+        chatLogPane.setBackground(BG_DARK);
+        chatLogPane.setForeground(CHAT_COLOR);
+        chatLogPane.setFont(new Font("Consolas", Font.PLAIN, 13));
+        chatLogPane.setCaretColor(TEXT_COLOR);
+        chatLogDoc = chatLogPane.getStyledDocument();
+
+        JScrollPane scrollPane = new JScrollPane(chatLogPane);
+        scrollPane.setBackground(BG_DARK);
+        scrollPane.setBorder(BorderFactory.createLineBorder(BG_INPUT));
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        panel.add(scrollPane, BorderLayout.CENTER);
+
         return panel;
     }
     
@@ -1106,7 +1156,7 @@ public class ServerGUI extends JFrame {
         gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
         propsGrid.add(createLabel("World Type:"), gbc);
         gbc.gridx = 1; gbc.weightx = 1;
-        levelTypeCombo = createComboBox(new String[]{"DEFAULT", "FLAT", "ALPHA", "ALPHA_SNOW", "SKY", "CLASSIC"});
+        levelTypeCombo = createComboBox(new String[]{"DEFAULT", "FLAT", "ALPHA", "ALPHA_SNOW", "SKY", "CLASSIC", "INFDEV"});
         propsGrid.add(levelTypeCombo, gbc);
         
         // Max Players
@@ -1144,7 +1194,7 @@ public class ServerGUI extends JFrame {
         viewDistanceField.setPreferredSize(new Dimension(80, 25));
         propsGrid.add(viewDistanceField, gbc);
 
-        // Spawn protection radius (global, mirrored to gamerule spawnRadius)
+        // Spawn protection radius (global server setting)
         gbc.gridx = 2; gbc.weightx = 0;
         propsGrid.add(createLabel("Spawn Protection:"), gbc);
         gbc.gridx = 3; gbc.weightx = 1;
@@ -1875,9 +1925,6 @@ public class ServerGUI extends JFrame {
             }
         }
 
-        if (server != null && !server.worlds.isEmpty() && server.worlds.get(0) != null && server.worlds.get(0).worldData != null) {
-            server.worlds.get(0).worldData.setSpawnRadius(radius);
-        }
     }
     
     private void styleSpinner(JSpinner spinner) {
@@ -2104,18 +2151,19 @@ public class ServerGUI extends JFrame {
                 
                 String message = record.getMessage();
                 if (message == null) return;
-                
-                String time = sdf.format(new Date(record.getMillis()));
-                String formatted = "[" + time + "] [" + record.getLevel().getName() + "] " + message;
-                
+
                 LogType type = LogType.INFO;
                 if (record.getLevel() == Level.SEVERE || record.getLevel() == Level.WARNING) {
                     type = LogType.ERROR;
-                } else if (message.contains("<") && message.contains(">")) {
+                } else if (isChatMessage(message)) {
                     type = LogType.CHAT;
                 } else if (message.startsWith("/") || message.contains("issued server command")) {
                     type = LogType.COMMAND;
                 }
+
+                String time = sdf.format(new Date(record.getMillis()));
+                String label = type == LogType.CHAT ? "CHAT" : record.getLevel().getName();
+                String formatted = "[" + time + "] [" + label + "] " + message;
                 
                 appendLog(formatted, type);
             }
@@ -2144,8 +2192,25 @@ public class ServerGUI extends JFrame {
             public void write(int b) {
                 if (b == '\n') {
                     String line = buffer.toString();
-                    if (!line.isEmpty()) {
+                    if (!line.isEmpty() && !isConsoleFormattedChatEcho(line)) {
                         appendLog(line, LogType.INFO);
+                    }
+                    buffer = new StringBuilder();
+                } else {
+                    buffer.append((char) b);
+                }
+            }
+        });
+
+        PrintStream guiErr = new PrintStream(new OutputStream() {
+            private StringBuilder buffer = new StringBuilder();
+
+            @Override
+            public void write(int b) {
+                if (b == '\n') {
+                    String line = buffer.toString();
+                    if (!line.isEmpty()) {
+                        appendLog(line, LogType.ERROR);
                     }
                     buffer = new StringBuilder();
                 } else {
@@ -2166,8 +2231,34 @@ public class ServerGUI extends JFrame {
                 guiOut.write(b);
             }
         }));
+        System.setErr(new PrintStream(new OutputStream() {
+            @Override
+            public void write(int b) throws IOException {
+                originalErr.write(b);
+                guiErr.write(b);
+            }
+        }));
     }
     
+    private boolean isChatMessage(String message) {
+        if (message == null) {
+            return false;
+        }
+        return message.matches("^<[^>]{1,32}>\\s.*");
+    }
+
+    private boolean isConsoleFormattedChatEcho(String line) {
+        if (line == null) {
+            return false;
+        }
+        Matcher matcher = CONSOLE_FORMATTED_LINE_PATTERN.matcher(line);
+        if (!matcher.matches()) {
+            return false;
+        }
+        String message = matcher.group(2);
+        return isChatMessage(message);
+    }
+
     private void appendLog(String message, LogType type) {
         LogEntry entry = new LogEntry(message, type);
         allLogs.add(entry);
@@ -2180,6 +2271,14 @@ public class ServerGUI extends JFrame {
         // Only show if matches filter
         if (matchesFilter(entry)) {
             SwingUtilities.invokeLater(() -> appendToConsole(entry));
+        }
+
+        if (entry.type == LogType.CHAT) {
+            chatOnlyLogs.add(entry);
+            while (chatOnlyLogs.size() > 5000) {
+                chatOnlyLogs.remove(0);
+            }
+            SwingUtilities.invokeLater(() -> appendToChatLogConsole(entry));
         }
     }
     
@@ -2222,6 +2321,19 @@ public class ServerGUI extends JFrame {
             // Ignore
         }
     }
+
+    private void appendToChatLogConsole(LogEntry entry) {
+        if (entry == null || entry.type != LogType.CHAT || chatLogPane == null || chatLogDoc == null) {
+            return;
+        }
+        try {
+            Style style = chatLogPane.addStyle("chatStyle", null);
+            StyleConstants.setForeground(style, CHAT_COLOR);
+            chatLogDoc.insertString(chatLogDoc.getLength(), entry.message + "\n", style);
+            chatLogPane.setCaretPosition(chatLogDoc.getLength());
+        } catch (BadLocationException ignored) {
+        }
+    }
     
     private void refreshConsole() {
         SwingUtilities.invokeLater(() -> {
@@ -2234,6 +2346,21 @@ public class ServerGUI extends JFrame {
                 }
             } catch (BadLocationException e) {
                 // Ignore
+            }
+        });
+    }
+
+    private void refreshChatLogConsole() {
+        SwingUtilities.invokeLater(() -> {
+            if (chatLogDoc == null) {
+                return;
+            }
+            try {
+                chatLogDoc.remove(0, chatLogDoc.getLength());
+                for (LogEntry entry : chatOnlyLogs) {
+                    appendToChatLogConsole(entry);
+                }
+            } catch (BadLocationException ignored) {
             }
         });
     }
@@ -2416,9 +2543,13 @@ public class ServerGUI extends JFrame {
                 });
                 
                 server.run();
-            } catch (Exception e) {
-                appendLog("[GUI] Server error: " + e.getMessage(), LogType.ERROR);
-                e.printStackTrace();
+            } catch (Throwable e) {
+                appendLog("[GUI] Server startup/runtime failure: " + e.toString(), LogType.ERROR);
+                appendThrowableToConsole(e);
+                File dumpFile = writeStartupFailureDump(e);
+                if (dumpFile != null) {
+                    appendLog("[GUI] Wrote startup failure dump: " + dumpFile.getAbsolutePath(), LogType.ERROR);
+                }
             } finally {
                 serverStarted = false;
                 server = null;
@@ -2432,6 +2563,67 @@ public class ServerGUI extends JFrame {
         }, "Server Thread");
         
         serverThread.start();
+    }
+
+    private void appendThrowableToConsole(Throwable throwable) {
+        if (throwable == null) {
+            return;
+        }
+        Throwable cursor = throwable;
+        int depth = 0;
+        while (cursor != null && depth < 8) {
+            appendLog("[GUI] " + (depth == 0 ? "Exception" : "Caused by") + ": " + cursor.toString(), LogType.ERROR);
+            StackTraceElement[] trace = cursor.getStackTrace();
+            int maxFrames = Math.min(18, trace.length);
+            for (int i = 0; i < maxFrames; i++) {
+                appendLog("[GUI]   at " + trace[i].toString(), LogType.ERROR);
+            }
+            if (trace.length > maxFrames) {
+                appendLog("[GUI]   ... " + (trace.length - maxFrames) + " more frames", LogType.ERROR);
+            }
+            cursor = cursor.getCause();
+            depth++;
+        }
+    }
+
+    private File writeStartupFailureDump(Throwable throwable) {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd-HHmmss");
+        File dump = new File("startup-failure-" + sdf.format(new Date()) + ".log");
+        PrintWriter writer = null;
+        try {
+            writer = new PrintWriter(new BufferedWriter(new FileWriter(dump)));
+            writer.println("=== Uberbukkit GUI Startup Failure Dump ===");
+            writer.println("timestamp=" + new Date());
+            writer.println("cwd=" + new File(".").getAbsolutePath());
+            writer.println("java.version=" + System.getProperty("java.version"));
+            writer.println("java.vendor=" + System.getProperty("java.vendor"));
+            writer.println("os.name=" + System.getProperty("os.name"));
+            writer.println("os.arch=" + System.getProperty("os.arch"));
+            writer.println("serverStartedFlag=" + serverStarted);
+            writer.println("serverThread=" + (serverThread != null ? serverThread.getName() : "<null>"));
+            writer.println();
+            writer.println("=== Exception Stack Trace ===");
+            if (throwable != null) {
+                throwable.printStackTrace(writer);
+            } else {
+                writer.println("<none>");
+            }
+            writer.println();
+            writer.println("=== Last Console Entries (tail) ===");
+            int start = Math.max(0, allLogs.size() - 300);
+            for (int i = start; i < allLogs.size(); i++) {
+                LogEntry entry = allLogs.get(i);
+                writer.println("[" + entry.type.name() + "] " + entry.message);
+            }
+            return dump;
+        } catch (IOException ioException) {
+            appendLog("[GUI] Failed to write startup failure dump: " + ioException.getMessage(), LogType.ERROR);
+            return null;
+        } finally {
+            if (writer != null) {
+                writer.close();
+            }
+        }
     }
     
     private void stopServer() {

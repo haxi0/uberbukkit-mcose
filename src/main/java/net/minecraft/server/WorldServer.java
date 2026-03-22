@@ -90,6 +90,8 @@ public class WorldServer extends World implements BlockChangeDelegate {
             int terrainType = this.worldData.getTerrainType();
             if (terrainType == 1 || terrainType == 5) {
                 provider = new AlphaChunkProvider(this, this.getSeed());
+            } else if (terrainType == 7) {
+                provider = new net.minecraft.server.Infdev.InfdevChunkProvider(this, this.getSeed());
             } else if (terrainType == 2) {
                 provider = new ChunkProviderFlat(this, this.getSeed(), false);
             } else if (terrainType == 3) {
@@ -231,4 +233,3 @@ public class WorldServer extends World implements BlockChangeDelegate {
         return this.manager;
     }
 }
-

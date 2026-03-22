@@ -22,12 +22,29 @@ public class WorldData {
     private boolean n;
     private int o;
     // UberBukkit: terrain type and alpha snow flag
-    private int terrainType = 0; // 0=DEFAULT,1=ALPHA,2=FLAT,3=SKY,5=ALPHA_SNOW
+    private int terrainType = 0; // 0=DEFAULT,1=ALPHA,2=FLAT,3=SKY,5=ALPHA_SNOW,6=CLASSIC,7=INFDEV
     private boolean alphaSnow = false;
     // Hardcore mode
     private boolean hardcore = false;
     // Difficulty: 0=peaceful, 1=easy, 2=normal, 3=hard
     private int difficulty = 1;
+
+    private void loadGameRulesFromCompound(NBTTagCompound gameRules) {
+        if (gameRules == null) {
+            return;
+        }
+
+        if (gameRules.hasKey("doDayNightCycle")) this.doDayNightCycle = gameRules.m("doDayNightCycle");
+        if (gameRules.hasKey("tntexplodes")) this.tntexplodes = gameRules.m("tntexplodes");
+        if (gameRules.hasKey("mobGriefing")) this.mobGriefing = gameRules.m("mobGriefing");
+        if (gameRules.hasKey("doWeatherCycle")) this.doWeatherCycle = gameRules.m("doWeatherCycle");
+        if (gameRules.hasKey("doFireTick")) this.doFireTick = gameRules.m("doFireTick");
+        if (gameRules.hasKey("showDeathMessages")) this.showDeathMessages = gameRules.m("showDeathMessages");
+        if (gameRules.hasKey("sleepEnabled")) this.sleepEnabled = gameRules.m("sleepEnabled");
+        if (gameRules.hasKey("advertiseAchievements")) this.advertiseAchievements = gameRules.m("advertiseAchievements");
+        if (gameRules.hasKey("keepInventory")) this.keepInventory = gameRules.m("keepInventory");
+        if (gameRules.hasKey("spawnRadius")) this.spawnRadius = Math.max(0, gameRules.e("spawnRadius"));
+    }
 
     public WorldData(NBTTagCompound nbttagcompound) {
         this.a = nbttagcompound.getLong("RandomSeed");
@@ -47,17 +64,34 @@ public class WorldData {
             this.h = nbttagcompound.k("Player");
             this.i = this.h.e("Dimension");
         }
+        boolean hasLegacySnowCovered = nbttagcompound.hasKey("SnowCovered");
+        boolean legacySnowCovered = hasLegacySnowCovered && nbttagcompound.m("SnowCovered");
+        boolean hasLegacySnowState = hasLegacySnowCovered || nbttagcompound.hasKey("isSnowWorld") || nbttagcompound.hasKey("AlphaSnow");
         if (nbttagcompound.hasKey("TerrainType")) {
             this.terrainType = nbttagcompound.e("TerrainType");
+        } else if (hasLegacySnowState) {
+            // Alpha 1.1.1 saves had no TerrainType field; infer ALPHA from legacy snow keys.
+            this.terrainType = 1;
         }
         if (nbttagcompound.hasKey("AlphaSnow")) {
             this.alphaSnow = nbttagcompound.m("AlphaSnow");
+        } else if (nbttagcompound.hasKey("isSnowWorld")) {
+            this.alphaSnow = nbttagcompound.m("isSnowWorld");
+        } else if (hasLegacySnowCovered) {
+            this.alphaSnow = legacySnowCovered;
+        }
+        if (this.terrainType == 5) {
+            this.alphaSnow = true;
         }
         if (nbttagcompound.hasKey("Hardcore")) {
             this.hardcore = nbttagcompound.m("Hardcore");
         }
         if (nbttagcompound.hasKey("Difficulty")) {
             this.difficulty = nbttagcompound.e("Difficulty");
+        }
+        // Modern/client-compatible gamerule layout.
+        if (nbttagcompound.hasKey("GameRules")) {
+            this.loadGameRulesFromCompound(nbttagcompound.k("GameRules"));
         }
         // Load gamerules, defaulting to true if not present
         if (nbttagcompound.hasKey("DoDayNightCycle")) this.doDayNightCycle = nbttagcompound.m("DoDayNightCycle");
@@ -154,6 +188,10 @@ public class WorldData {
         }
         nbttagcompound.a("TerrainType", this.terrainType);
         nbttagcompound.a("AlphaSnow", this.alphaSnow);
+        // Cross-compat aliases used by client and Alpha 1.1.1 world metadata.
+        nbttagcompound.a("isSnowWorld", this.alphaSnow);
+        nbttagcompound.a("SnowWorld", this.alphaSnow);
+        nbttagcompound.a("SnowCovered", this.alphaSnow);
         nbttagcompound.a("Hardcore", this.hardcore);
         nbttagcompound.a("Difficulty", this.difficulty);
         nbttagcompound.a("DoDayNightCycle", this.doDayNightCycle);
@@ -167,6 +205,20 @@ public class WorldData {
         nbttagcompound.a("KeepInventory", this.keepInventory);
         // Integer gamerules
         nbttagcompound.a("SpawnRadius", this.spawnRadius);
+
+        // Modern/client-compatible GameRules compound.
+        NBTTagCompound gameRules = new NBTTagCompound();
+        gameRules.a("doDayNightCycle", this.doDayNightCycle);
+        gameRules.a("tntexplodes", this.tntexplodes);
+        gameRules.a("mobGriefing", this.mobGriefing);
+        gameRules.a("doWeatherCycle", this.doWeatherCycle);
+        gameRules.a("doFireTick", this.doFireTick);
+        gameRules.a("showDeathMessages", this.showDeathMessages);
+        gameRules.a("sleepEnabled", this.sleepEnabled);
+        gameRules.a("advertiseAchievements", this.advertiseAchievements);
+        gameRules.a("keepInventory", this.keepInventory);
+        gameRules.a("spawnRadius", this.spawnRadius);
+        nbttagcompound.a("GameRules", gameRules);
     }
 
     public long getSeed() {
@@ -263,7 +315,12 @@ public class WorldData {
 
     // UberBukkit: terrain type support
     public int getTerrainType() { return this.terrainType; }
-    public void setTerrainType(int t) { this.terrainType = t; }
+    public void setTerrainType(int t) {
+        this.terrainType = t;
+        if (t == 5) {
+            this.alphaSnow = true;
+        }
+    }
     public boolean isSnowWorld() { return this.alphaSnow; }
     public void setSnowWorld(boolean flag) { this.alphaSnow = flag; }
 
@@ -283,7 +340,7 @@ public class WorldData {
     private boolean doFireTick = true;
     private boolean showDeathMessages = true;
     private boolean advertiseAchievements = true; // Default to true - broadcast achievements to all players
-    private boolean sleepEnabled = false; // If true, sleeping in beds is enabled
+    private boolean sleepEnabled = true; // Default: sleeping in beds is enabled
     private boolean keepInventory = false; // If true, players keep inventory on death
     
     // Gamerules (integer)

@@ -106,6 +106,7 @@ public final class CommandPermissions {
         DefaultPermissions.registerPermission(PREFIX + "version", "Allows the user to view the version of the server", PermissionDefault.TRUE, commands);
         DefaultPermissions.registerPermission(PREFIX + "gamerule", "Allows the user to modify game rules", PermissionDefault.OP, commands);
         DefaultPermissions.registerPermission(PREFIX + "debug", "Allows the user to run debug commands", PermissionDefault.OP, commands);
+        DefaultPermissions.registerPermission(PREFIX + "relight", "Allows the user to relight loaded chunks to fix stale lighting", PermissionDefault.OP, commands);
 
         commands.recalculatePermissibles();
 

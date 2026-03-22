@@ -1,7 +1,7 @@
 package net.minecraft.server;
 
 public class WorldChunkManagerSky extends WorldChunkManager {
-    private static final int SKY_BIOME_REGION_SIZE = 128;
+    private static final int SKY_BIOME_REGION_SIZE = 64;
     private static final int DESERT_SELECTOR_MAX = 82;
     private static final int TUNDRA_SELECTOR_MAX = 205;
     private static final double PLAINS_TEMPERATURE = 0.5D;

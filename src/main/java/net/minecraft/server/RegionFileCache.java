@@ -16,6 +16,7 @@ public class RegionFileCache {
     // pressure during a large save could cause the GC to clear references,
     // meaning RegionFile.b() (close/flush WAL) would be skipped entirely.
     private static final Map<File, RegionFile> a = new HashMap<File, RegionFile>();
+    private static boolean bulkConversionMode = false;
 
     private RegionFileCache() {
     }
@@ -40,6 +41,19 @@ public class RegionFileCache {
         regionfile = new RegionFile(file3);
         a.put(file3, regionfile);
         return regionfile;
+    }
+
+    public static synchronized void setBulkConversionMode(boolean flag) {
+        if (bulkConversionMode == flag) {
+            return;
+        }
+
+        a();
+        bulkConversionMode = flag;
+    }
+
+    public static synchronized boolean isBulkConversionMode() {
+        return bulkConversionMode;
     }
 
     public static synchronized void a() {

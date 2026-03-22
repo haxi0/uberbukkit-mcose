@@ -4,6 +4,7 @@ import java.util.List;
 import net.minecraft.server.EntityMonster;
 
 public class EntitySnowman extends EntitySnowmanBase {
+	private static final EntityDataAccessor<Byte> DATA_PUMPKIN_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
 	protected boolean hasAttacked = false;
 
 	public EntitySnowman(World var1) {
@@ -13,24 +14,37 @@ public class EntitySnowman extends EntitySnowmanBase {
 		this.health = 4;
 	}
 
+	protected void defineSynchedData() {
+		super.defineSynchedData();
+		this.getSynchedEntityData().define(DATA_PUMPKIN_ID, Byte.valueOf((byte)1));
+	}
+
 	protected void b() {
 		super.b();
-		this.datawatcher.a(16, Byte.valueOf((byte)1));
+		this.datawatcher.a(16, Byte.valueOf(this.getPumpkinData()));
+	}
+
+	public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+		super.onSyncedDataUpdated(accessor);
+		if(accessor == DATA_PUMPKIN_ID) {
+			Byte value = this.getSynchedEntityData().get(DATA_PUMPKIN_ID);
+			this.datawatcher.watch(16, value == null ? Byte.valueOf((byte)1) : value);
+		}
 	}
 
 	public boolean hasPumpkin() {
-		return (this.datawatcher.a(16) & 1) != 0;
+		return (this.getPumpkinData() & 1) != 0;
 	}
 
 	public void setPumpkin(boolean hasPumpkin) {
-		byte data = this.datawatcher.a(16);
+		byte data = this.getPumpkinData();
 		if(hasPumpkin) {
 			data = (byte)(data | 1);
 		} else {
 			data = (byte)(data & -2);
 		}
 
-		this.datawatcher.watch(16, Byte.valueOf(data));
+		this.setPumpkinData(data);
 	}
 
 	public int getMaxHealth() {
@@ -141,5 +155,21 @@ public class EntitySnowman extends EntitySnowmanBase {
 			this.a(Item.SNOW_BALL.id, 1);
 		}
 		
+	}
+
+	private byte getPumpkinData() {
+		Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_PUMPKIN_ID);
+		if(value != null) {
+			return value.byteValue();
+		}
+		return this.datawatcher.a(16);
+	}
+
+	private void setPumpkinData(byte data) {
+		if(this.getSynchedEntityData() != null) {
+			this.getSynchedEntityData().set(DATA_PUMPKIN_ID, Byte.valueOf(data));
+		} else {
+			this.datawatcher.watch(16, Byte.valueOf(data));
+		}
 	}
 }

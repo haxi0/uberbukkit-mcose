@@ -55,12 +55,13 @@ public class ChunkLoader implements IChunkLoader {
                     return null;
                 }
 
-                if (!nbttagcompound.k("Level").hasKey("Blocks")) {
+                NBTTagCompound level = nbttagcompound.k("Level");
+                if (!level.hasKey("Blocks") && !BlockStateCodec.hasStateData(level)) {
                     System.out.println("Chunk file at " + i + "," + j + " is missing block data, skipping");
                     return null;
                 }
 
-                Chunk chunk = a(world, nbttagcompound.k("Level"));
+                Chunk chunk = a(world, level);
 
                 if (!chunk.a(i, j)) {
                     System.out.println("Chunk file at " + i + "," + j + " is in the wrong location; relocating. (Expected " + i + ", " + j + ", got " + chunk.x + ", " + chunk.z + ")");
@@ -117,8 +118,15 @@ public class ChunkLoader implements IChunkLoader {
         nbttagcompound.a("xPos", chunk.x);
         nbttagcompound.a("zPos", chunk.z);
         nbttagcompound.setLong("LastUpdate", world.getTime());
-        nbttagcompound.a("Blocks", chunk.b);
-        nbttagcompound.a("Data", chunk.e.a);
+        NibbleArray data = chunk.e == null ? new NibbleArray(chunk.b.length) : chunk.e;
+        WorldData worldData = world == null ? null : world.q();
+        boolean writeStateOnly = worldData != null && worldData.i() >= WorldSaveVersions.MCREGION_2;
+        if (writeStateOnly) {
+            BlockStateCodec.writeStateData(nbttagcompound, chunk.b, data.a);
+        } else {
+            nbttagcompound.a("Blocks", chunk.b);
+            nbttagcompound.a("Data", data.a);
+        }
         nbttagcompound.a("SkyLight", chunk.f.a);
         nbttagcompound.a("BlockLight", chunk.g.a);
         nbttagcompound.a("HeightMap", chunk.heightMap);
@@ -204,9 +212,17 @@ public class ChunkLoader implements IChunkLoader {
         int i = nbttagcompound.e("xPos");
         int j = nbttagcompound.e("zPos");
         Chunk chunk = new Chunk(world, i, j);
-
-        chunk.b = nbttagcompound.j("Blocks");
-        chunk.e = new NibbleArray(nbttagcompound.j("Data"));
+        BlockStateCodec.DecodedState decodedState = BlockStateCodec.readStateData(nbttagcompound);
+        if (decodedState != null) {
+            chunk.b = decodedState.blocks;
+            chunk.e = new NibbleArray(decodedState.metadata);
+            if (decodedState.usedNearestFallback) {
+                System.out.println("[RegionCore] Loaded chunk [" + i + "," + j + "] with nearest-state legacy fallback projections.");
+            }
+        } else {
+            chunk.b = nbttagcompound.j("Blocks");
+            chunk.e = new NibbleArray(nbttagcompound.j("Data"));
+        }
         chunk.f = new NibbleArray(nbttagcompound.j("SkyLight"));
         chunk.g = new NibbleArray(nbttagcompound.j("BlockLight"));
         chunk.heightMap = nbttagcompound.j("HeightMap");

@@ -19,9 +19,9 @@ public class BlockFlowing extends BlockFluids {
     }
 
     private void i(World world, int i, int j, int k) {
-        int l = world.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getFluidMetadata(world, i, j, k);
 
-        world.setRawTypeIdAndData(i, j, k, this.id + 1, l);
+        CriticalBlockStateAccess.setLegacyState(world, i, j, k, this.id + 1, l, false);
         world.b(i, j, k, i, j, k);
         world.notify(i, j, k);
     }
@@ -70,7 +70,7 @@ public class BlockFlowing extends BlockFluids {
             if (this.a >= 2 && this.material == Material.WATER) {
                 if (world.getMaterial(i, j - 1, k).isBuildable()) {
                     i1 = 0;
-                } else if (world.getMaterial(i, j - 1, k) == this.material && world.getData(i, j, k) == 0) {
+                } else if (world.getMaterial(i, j - 1, k) == this.material && CriticalBlockStateAccess.getFluidMetadata(world, i, j, k) == 0) {
                     i1 = 0;
                 }
             }
@@ -85,7 +85,7 @@ public class BlockFlowing extends BlockFluids {
                 if (i1 < 0) {
                     world.setTypeId(i, j, k, 0);
                 } else {
-                    world.setData(i, j, k, i1);
+                    CriticalBlockStateAccess.setMetadata(world, i, j, k, i1, true);
                     world.c(i, j, k, this.id, this.c());
                     world.applyPhysics(i, j, k, this.id);
                 }
@@ -105,9 +105,9 @@ public class BlockFlowing extends BlockFluids {
 
             if (!event.isCancelled()) {
                 if (l >= 8) {
-                    world.setTypeIdAndData(i, j - 1, k, this.id, l);
+                    CriticalBlockStateAccess.setLegacyState(world, i, j - 1, k, this.id, l, true);
                 } else {
-                    world.setTypeIdAndData(i, j - 1, k, this.id, l + 8);
+                    CriticalBlockStateAccess.setLegacyState(world, i, j - 1, k, this.id, l + 8, true);
                 }
             }
             // CraftBukkit end
@@ -157,7 +157,7 @@ public class BlockFlowing extends BlockFluids {
                 }
             }
 
-            world.setTypeIdAndData(i, j, k, this.id, l);
+            CriticalBlockStateAccess.setLegacyState(world, i, j, k, this.id, l, true);
         }
     }
 
@@ -185,7 +185,7 @@ public class BlockFlowing extends BlockFluids {
                     ++i2;
                 }
 
-                if (!this.k(world, l1, j, i2) && (world.getMaterial(l1, j, i2) != this.material || world.getData(l1, j, i2) != 0)) {
+                if (!this.k(world, l1, j, i2) && (world.getMaterial(l1, j, i2) != this.material || CriticalBlockStateAccess.getFluidMetadata(world, l1, j, i2) != 0)) {
                     if (!this.k(world, l1, j - 1, i2)) {
                         return l;
                     }
@@ -229,7 +229,7 @@ public class BlockFlowing extends BlockFluids {
                 ++j1;
             }
 
-            if (!this.k(world, i1, j, j1) && (world.getMaterial(i1, j, j1) != this.material || world.getData(i1, j, j1) != 0)) {
+            if (!this.k(world, i1, j, j1) && (world.getMaterial(i1, j, j1) != this.material || CriticalBlockStateAccess.getFluidMetadata(world, i1, j, j1) != 0)) {
                 if (!this.k(world, i1, j - 1, j1)) {
                     this.c[l] = 0;
                 } else {

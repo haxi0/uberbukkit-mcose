@@ -96,6 +96,10 @@ public class DataWatcher {
         return arraylist;
     }
 
+    public List getAllWatchedObjects() {
+        return new ArrayList(this.b.values());
+    }
+
     public void a(DataOutputStream dataoutputstream) throws IOException {
         Iterator iterator = this.b.values().iterator();
 
@@ -203,6 +207,25 @@ public class DataWatcher {
         }
 
         return arraylist;
+    }
+
+    public void a(List list) {
+        if (list == null) {
+            return;
+        }
+
+        Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+            Object raw = iterator.next();
+            if (!(raw instanceof WatchableObject)) {
+                continue;
+            }
+            WatchableObject incoming = (WatchableObject)raw;
+            WatchableObject current = (WatchableObject)this.b.get(Integer.valueOf(incoming.a()));
+            if (current != null) {
+                current.a(incoming.b());
+            }
+        }
     }
 
     public boolean getD() {

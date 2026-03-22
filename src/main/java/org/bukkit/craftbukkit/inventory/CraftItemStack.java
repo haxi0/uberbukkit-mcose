@@ -126,4 +126,23 @@ public class CraftItemStack extends ItemStack {
     public int getMaxStackSize() {
         return item.getItem().getMaxStackSize();
     }
+
+    public net.minecraft.server.ItemStack getHandle() {
+        return this.item;
+    }
+
+    public static net.minecraft.server.ItemStack asNMSCopy(ItemStack stack) {
+        if (stack == null) {
+            return null;
+        }
+        if (stack instanceof CraftItemStack) {
+            return ((CraftItemStack) stack).item;
+        }
+        return new net.minecraft.server.ItemStack(stack.getTypeId(), stack.getAmount(), stack.getDurability());
+    }
+
+    public static CraftItemStack asCraftCopy(ItemStack stack) {
+        net.minecraft.server.ItemStack nms = asNMSCopy(stack);
+        return nms == null ? null : new CraftItemStack(nms.cloneItemStack());
+    }
 }

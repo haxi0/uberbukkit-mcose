@@ -94,6 +94,10 @@ public class NBTTagCompound extends NBTBase {
         this.a(s, (byte) (flag ? 1 : 0));
     }
 
+    public void remove(String s) {
+        this.a.remove(s);
+    }
+
     public boolean hasKey(String s) {
         return this.a.containsKey(s);
     }

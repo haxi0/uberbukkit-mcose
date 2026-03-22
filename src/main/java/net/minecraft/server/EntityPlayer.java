@@ -31,6 +31,7 @@ import uk.betacraft.uberbukkit.protocol.Protocol;
 // CraftBukkit start
 
 public class EntityPlayer extends EntityHuman implements ICrafting {
+    private static final int BOW_POSE_DURATION_TICKS = 10;
 
     public NetServerHandler netServerHandler;
     public MinecraftServer b;
@@ -44,12 +45,15 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     private int bL = -99999999;
     private int bM = 60;
     private ItemStack[] bN = new ItemStack[] { null, null, null, null, null };
+    private boolean lastSentBowPose = false;
+    private int bowPoseTicks = 0;
     private int bO = 0;
     public boolean h;
     // uberbukkit
     public Protocol protocol;
     public ProcessPacket5 packet5;
     public boolean isInWorkbench = false; // uberbukkit pvn < 7
+    private int skinModelPartMask = 0x7F;
 
     public EntityPlayer(MinecraftServer minecraftserver, World world, String s, ItemInWorldManager iteminworldmanager, int pvn) {
         super(world);
@@ -91,6 +95,14 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public String displayName;
     public UUID playerUUID; //Project Poseidon
     public org.bukkit.Location compassTarget;
+
+    public int getSkinModelPartMask() {
+        return this.skinModelPartMask & 0x7F;
+    }
+
+    public void setSkinModelPartMask(int modelPartMask) {
+        this.skinModelPartMask = modelPartMask & 0x7F;
+    }
     
     /**
      * Get the Mojang UUID for this player.
@@ -178,6 +190,9 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
     public void m_() {
         this.itemInWorldManager.a();
         --this.bM;
+        if (this.bowPoseTicks > 0) {
+            --this.bowPoseTicks;
+        }
         this.activeContainer.a();
 
         for (int i = 0; i < 5; ++i) {
@@ -188,10 +203,26 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
                 this.bN[i] = itemstack;
             }
         }
+
+        if (!this.world.isStatic) {
+            boolean bowPose = this.isBowPoseActive();
+            if (bowPose != this.lastSentBowPose) {
+                this.world.a(this, (byte) (bowPose ? 16 : 17)); // Custom statuses: player bow pose on/off
+                this.lastSentBowPose = bowPose;
+            }
+        }
     }
 
     public ItemStack c_(int i) {
         return i == 0 ? this.inventory.getItemInHand() : this.inventory.armor[i - 1];
+    }
+
+    public boolean isBowPoseActive() {
+        return this.bowPoseTicks > 0;
+    }
+
+    public void triggerBowPose() {
+        this.bowPoseTicks = BOW_POSE_DURATION_TICKS;
     }
 
     public void die(Entity entity) {

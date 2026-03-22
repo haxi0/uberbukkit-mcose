@@ -45,6 +45,11 @@ settings:
         enabled: true
         info: This setting causes the server to detect and kick malicious players who send too many packets in a short period of time. This is useful to prevent players from sending too many packets to the server to cause lag.
         threshold: 10000
+    connection-throttle-ms:
+        value: 0
+        info: Minimum milliseconds between connections from the same IP. Set to 0 to disable (default). Only increase if you're experiencing connection spam attacks.
+        burst: 4
+        burst-info: How many connections from one IP are allowed inside the throttle window before newer attempts are rejected.
     uuid-fetcher:
         allow-graceful-uuids:
             value: true
@@ -61,6 +66,16 @@ settings:
                 info: The Mojang API is case-insensitive by default meaning usernames with different casing will return the same UUID. This setting checks the case of the username to prevent this issue. If the name is invalid, the player will be kicked.
             info: This setting allows you to change the URL that the server fetches UUIDs from. This is useful if you have a custom UUID server or a proxy server that fetches UUIDs.
             value: https://api.minecraftservices.com/minecraft/profile/lookup/name/{username}
+    authentication:
+        session:
+            max-attempts: 3
+            max-attempts-info: Maximum modern session verification attempts per login before failing authentication.
+            retry-delay-ms: 250
+            retry-delay-ms-info: Base delay in milliseconds before retrying modern session verification after transient failures.
+            max-retry-delay-ms: 1000
+            max-retry-delay-ms-info: Upper bound in milliseconds for exponential authentication retry backoff.
+            parallel-no-ip-fallback: true
+            parallel-no-ip-fallback-info: If enabled, authentication may perform a no-IP hasJoined fallback when the primary lookup is inconclusive or transiently failing.
     support:
         modloader:
             enable: false

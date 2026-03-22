@@ -2,6 +2,7 @@ package net.minecraft.server;
 
 import net.minecraft.server.Alpha.AlphaWorldGenBigTree;
 import net.minecraft.server.Alpha.AlphaWorldGenTrees;
+import net.minecraft.server.Infdev.InfdevWorldGenTrees;
 import org.bukkit.BlockChangeDelegate;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.material.MaterialData;
@@ -51,6 +52,10 @@ public class BlockSapling extends BlockFlower {
         return world != null && world.worldData != null && (world.worldData.getTerrainType() == 1 || world.worldData.getTerrainType() == 5);
     }
 
+    private boolean isInfdevTerrainWorld(World world) {
+        return world != null && world.worldData != null && world.worldData.getTerrainType() == 7;
+    }
+
     public int a(int i, int j) {
         j &= 3;
         return j == 1 ? 63 : (j == 2 ? 79 : super.a(i, j));
@@ -58,6 +63,15 @@ public class BlockSapling extends BlockFlower {
 
     public void b(World world, int i, int j, int k, Random random) {
         int l = world.getData(i, j, k) & 3;
+
+        if (this.isInfdevTerrainWorld(world)) {
+            world.setRawTypeId(i, j, k, 0);
+            boolean grownTree = new InfdevWorldGenTrees().a(world, random, i, j, k);
+            if (!grownTree) {
+                world.setRawTypeIdAndData(i, j, k, this.id, l);
+            }
+            return;
+        }
 
         if (this.isAlphaTerrainWorld(world)) {
             world.setRawTypeId(i, j, k, 0);

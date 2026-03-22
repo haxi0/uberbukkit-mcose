@@ -1,6 +1,8 @@
 package net.minecraft.server.registry;
 
 import net.minecraft.server.Entity;
+import net.minecraft.server.EntityTypeDef;
+import net.minecraft.server.Holder;
 import net.minecraft.server.World;
 import net.minecraft.server.util.ResourceLocation;
 
@@ -75,6 +77,30 @@ public final class EntityTypeRegistryApi {
 
     public static ResourceLocation getKeyByLegacyId(int legacyId) {
         return EntityTypeRegistry.getKeyByLegacyId(legacyId);
+    }
+
+    public static String getLegacyName(ResourceLocation key) {
+        return EntityTypeRegistry.getLegacyName(key);
+    }
+
+    public static EntityTypeDef<?> getType(ResourceLocation key) {
+        return EntityTypeRegistry.getType(key);
+    }
+
+    public static Holder<EntityTypeDef<?>> getTypeHolder(ResourceLocation key) {
+        return EntityTypeRegistry.getTypeHolder(key);
+    }
+
+    public static Holder<EntityTypeDef<?>> getTypeHolder(Class<?> entityClass) {
+        return EntityTypeRegistry.getTypeHolder(entityClass);
+    }
+
+    public static Holder<EntityTypeDef<?>> getTypeHolder(Entity entity) {
+        return EntityTypeRegistry.getTypeHolder(entity);
+    }
+
+    public static EntityTypeDef<?> getTypeByRuntimeId(int runtimeId) {
+        return EntityTypeRegistry.getTypeByRuntimeId(runtimeId);
     }
 
     public static Entity createEntity(ResourceLocation key, World world) {

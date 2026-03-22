@@ -23,8 +23,13 @@ public class ServerNBTManager extends PlayerNBTManager {
     }
 
     public void a(WorldData worlddata, List list) {
-        worlddata.a(19132);
+        worlddata.a(WorldSaveVersions.currentWriteVersion());
         super.a(worlddata, list);
+    }
+
+    public void a(WorldData worlddata) {
+        worlddata.a(WorldSaveVersions.currentWriteVersion());
+        super.a(worlddata);
     }
 
     public void e() {

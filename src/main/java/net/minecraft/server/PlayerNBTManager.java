@@ -54,20 +54,49 @@ public class PlayerNBTManager implements PlayerFileData, IDataManager {
     }
 
     public void b() {
-        try {
-            File file1 = new File(this.b, "session.lock");
-            DataInputStream datainputstream = new DataInputStream(new FileInputStream(file1));
+        File lockFile = new File(this.b, "session.lock");
+        IOException lastIoException = null;
+        final int maxAttempts = 3;
 
+        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
+            DataInputStream lockInput = null;
             try {
-                if (datainputstream.readLong() != this.e) {
+                lockInput = new DataInputStream(new FileInputStream(lockFile));
+                if (lockInput.readLong() != this.e) {
                     throw new MinecraftException("The save is being accessed from another location, aborting");
                 }
+
+                // Lock check succeeded; no need to keep retrying.
+                return;
+            } catch (IOException ioexception) {
+                lastIoException = ioexception;
+
+                if (attempt < maxAttempts) {
+                    try {
+                        Thread.sleep(50L * attempt);
+                    } catch (InterruptedException interruptedexception) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
             } finally {
-                datainputstream.close();
+                if (lockInput != null) {
+                    try {
+                        lockInput.close();
+                    } catch (IOException ignored) {
+                    }
+                }
             }
-        } catch (IOException ioexception) {
-            throw new MinecraftException("Failed to check session lock, aborting");
         }
+
+        String detail = "unknown I/O error";
+        if (lastIoException != null) {
+            String message = lastIoException.getMessage();
+            detail = lastIoException.getClass().getSimpleName() + (message != null ? ": " + message : "");
+        }
+
+        throw new MinecraftException("Failed to check session lock at " + lockFile.getPath()
+            + " after " + maxAttempts + " attempts (" + detail + "), aborting");
     }
 
     public IChunkLoader a(WorldProvider worldprovider) {

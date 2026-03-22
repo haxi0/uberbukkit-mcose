@@ -20,6 +20,7 @@ public class RegionFile {
     private static final byte REGION_CODEC_GZIP = 1;
     private static final byte REGION_CODEC_ZLIB = 2;
     private static final byte REGION_CODEC_ZSTD = 3;
+    private static final String WAL_LOG_PREFIX = "[RegionCore WAL]";
     private static final int WAL_LOG_LEVEL = getWalLogLevel();
     private static final boolean WAL_STRICT_SYNC = isStrictWalMode();
     private static final int WAL_SYNC_BATCH = getWalSyncBatch();
@@ -104,15 +105,19 @@ public class RegionFile {
         }
 
         if (flag) {
-            try {
-                this.writeAheadLog = new RegionFileWAL(this.b);
-                this.logWalBanner();
-                this.logWal(1, "enabled for " + this.b.getName() + " (mode=" + (WAL_STRICT_SYNC ? "strict" : "balanced") + ", batch=" + WAL_SYNC_BATCH + ")");
-                this.recoverFromWriteAheadLog();
-            } catch (IOException ioexception1) {
-                this.writeAheadLog = null;
-                this.logWal(1, "disabled for " + this.b.getName() + " (init failed: " + ioexception1.getMessage() + ")");
-                ioexception1.printStackTrace();
+            if (RegionFileCache.isBulkConversionMode()) {
+                this.logWal(1, "disabled for " + this.b.getName() + " (bulk conversion mode)");
+            } else {
+                try {
+                    this.writeAheadLog = new RegionFileWAL(this.b);
+                    this.logWalBanner();
+                    this.logWal(1, "enabled for " + this.b.getName() + " (mode=" + (WAL_STRICT_SYNC ? "strict" : "balanced") + ", batch=" + WAL_SYNC_BATCH + ")");
+                    this.recoverFromWriteAheadLog();
+                } catch (IOException ioexception1) {
+                    this.writeAheadLog = null;
+                    this.logWal(1, "disabled for " + this.b.getName() + " (init failed: " + ioexception1.getMessage() + ")");
+                    ioexception1.printStackTrace();
+                }
             }
         }
     }
@@ -404,7 +409,7 @@ public class RegionFile {
 
     private void logWal(int i, String s) {
         if (WAL_LOG_LEVEL >= i) {
-            System.out.println("[McRegion WAL] " + s);
+            System.out.println(WAL_LOG_PREFIX + " " + s);
         }
     }
 
@@ -412,25 +417,36 @@ public class RegionFile {
         if (!walBannerLogged && WAL_LOG_LEVEL > 0) {
             String s = WAL_LOG_LEVEL >= 2 ? "verbose" : "basic";
 
-            System.out.println("[McRegion WAL] active mode=" + (WAL_STRICT_SYNC ? "strict" : "balanced") + ", batch=" + WAL_SYNC_BATCH + ", log=" + s);
+            System.out.println(WAL_LOG_PREFIX + " active mode=" + (WAL_STRICT_SYNC ? "strict" : "balanced") + ", batch=" + WAL_SYNC_BATCH + ", log=" + s);
             walBannerLogged = true;
         }
     }
 
     private static boolean isStrictWalMode() {
-        String s = System.getProperty("mcregion.wal.mode", "balanced");
+        String s = getWalProperty("mode", "balanced");
 
         return "strict".equals(s.toLowerCase(Locale.ROOT));
     }
 
     private static int getWalSyncBatch() {
+        String custom = System.getProperty("regioncore.wal.syncBatch");
+        if (custom != null) {
+            try {
+                int parsed = Integer.parseInt(custom.trim());
+                if (parsed > 0) {
+                    return parsed;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
         Integer integer = Integer.getInteger("mcregion.wal.syncBatch");
 
         return integer != null && integer.intValue() > 0 ? integer.intValue() : 64;
     }
 
     private static int getWalLogLevel() {
-        String s = System.getProperty("mcregion.wal.log", "off");
+        String s = getWalProperty("log", "off");
         String s1 = s.toLowerCase(Locale.ROOT);
 
         if (!"0".equals(s1) && !"false".equals(s1) && !"off".equals(s1)) {
@@ -438,5 +454,13 @@ public class RegionFile {
         } else {
             return 0;
         }
+    }
+
+    private static String getWalProperty(String suffix, String fallback) {
+        String value = System.getProperty("regioncore.wal." + suffix);
+        if (value != null) {
+            return value;
+        }
+        return System.getProperty("mcregion.wal." + suffix, fallback);
     }
 }

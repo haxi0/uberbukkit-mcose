@@ -7,6 +7,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 // CraftBukkit end
 
 public class EntitySkeleton extends EntityMonster {
+    private static final EntityDataAccessor<ItemStack> DATA_HELD_ITEM_ID = new EntityDataAccessor<ItemStack>(16, EntityDataSerializers.ITEM_STACK);
 
     private static final ItemStack a = new ItemStack(Item.BOW, 1);
     private boolean lastSentHostileState = false;
@@ -14,6 +15,25 @@ public class EntitySkeleton extends EntityMonster {
     public EntitySkeleton(World world) {
         super(world);
         this.texture = "/mob/skeleton.png";
+    }
+
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.getSynchedEntityData().define(DATA_HELD_ITEM_ID, a == null ? null : a.cloneItemStack());
+    }
+
+    protected void b() {
+        super.b();
+        ItemStack held = this.getSyncedHeldItem();
+        this.datawatcher.a(16, held == null ? null : held.cloneItemStack());
+    }
+
+    public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+        super.onSyncedDataUpdated(accessor);
+        if (accessor == DATA_HELD_ITEM_ID) {
+            ItemStack held = this.getSynchedEntityData().get(DATA_HELD_ITEM_ID);
+            this.datawatcher.watch(16, held == null ? null : held.cloneItemStack());
+        }
     }
 
     protected String g() {
@@ -121,5 +141,23 @@ public class EntitySkeleton extends EntityMonster {
             bworld.dropItemNaturally(entity.getLocation(), stack);
         }
         // CraftBukkit end
+    }
+
+    private ItemStack getSyncedHeldItem() {
+        ItemStack held = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_HELD_ITEM_ID);
+        if (held != null) {
+            return held;
+        }
+        return a == null ? null : a.cloneItemStack();
+    }
+
+    @SuppressWarnings("unused")
+    private void setSyncedHeldItem(ItemStack heldItem) {
+        ItemStack value = heldItem == null ? null : heldItem.cloneItemStack();
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_HELD_ITEM_ID, value);
+        } else {
+            this.datawatcher.watch(16, value);
+        }
     }
 }

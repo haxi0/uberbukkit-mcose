@@ -263,17 +263,23 @@ public class NetLoginHandler extends NetHandler {
             // MCOSE: Signal modded server - enables modern fence collision and other compatibility flags
             netserverhandler.sendPacket(new Packet70Bed(19));
 
-            // Poseidon parity: signal client to enable special visuals for ALPHA/ALPHA_SNOW/SKY on overworld
+            // Poseidon parity: signal client to enable special visuals on overworld attach.
             try {
                 int actualTerrainType = (worldserver.worldData != null ? worldserver.worldData.getTerrainType() : 0);
                 if (worldserver.worldProvider.dimension == 0) {
-                    if (actualTerrainType == 1 || actualTerrainType == 5 || actualTerrainType == 6) {
-                        // ALPHA or ALPHA_SNOW visuals
+                    if (isAlphaVisualTerrain(actualTerrainType)) {
+                        // ALPHA / ALPHA_SNOW visuals
                         netserverhandler.sendPacket(new Packet70Bed(5));
                         if (actualTerrainType == 5) {
                             // Explicitly signal ALPHA_SNOW variant so client picks snow biome visuals
                             netserverhandler.sendPacket(new Packet70Bed(10));
                         }
+                    } else if (actualTerrainType == 7) {
+                        // INFDEV visuals (parallel to deferred alpha flow)
+                        netserverhandler.sendPacket(new Packet70Bed(20));
+                    } else if (actualTerrainType == 6) {
+                        // CLASSIC visuals use the INFDEV renderer path.
+                        netserverhandler.sendPacket(new Packet70Bed(21));
                     } else if (actualTerrainType == 3) {
                         // SKY visuals
                         netserverhandler.sendPacket(new Packet70Bed(6));
@@ -305,19 +311,19 @@ public class NetLoginHandler extends NetHandler {
                 }
                 // uberbukkit: signal client to enable ladder-gap mechanics on modded clients
                 netserverhandler.sendPacket(new Packet70Bed(7));
-                // Send Alpha terrain hint on login based on overworld terrain type
+                // Send terrain visual hint on login based on overworld terrain type
                 try {
                     WorldServer ws = this.server.getWorldServer(0);
                     if (ws != null && ws.worldData != null) {
                         int terrainType = ws.worldData.getTerrainType();
-                        if (terrainType == 1 || terrainType == 5) {
-                            netserverhandler.sendPacket(new Packet70Bed(8)); // Alpha on
+                        if (isAlphaVisualTerrain(terrainType) || isInfdevVisualTerrain(terrainType)) {
+                            netserverhandler.sendPacket(new Packet70Bed(8)); // Terrain override on
                             if (terrainType == 5) {
                                 // Signal ALPHA_SNOW variant explicitly
                                 netserverhandler.sendPacket(new Packet70Bed(10));
                             }
                         } else {
-                            netserverhandler.sendPacket(new Packet70Bed(9)); // Alpha off
+                            netserverhandler.sendPacket(new Packet70Bed(9)); // Terrain override off
                         }
                     }
                 } catch (Throwable ignore) {}
@@ -439,6 +445,14 @@ public class NetLoginHandler extends NetHandler {
 
     public static Packet1Login a(NetLoginHandler netloginhandler, Packet1Login packet1login) {
         return netloginhandler.h = packet1login;
+    }
+
+    private static boolean isAlphaVisualTerrain(int terrainType) {
+        return terrainType == 1 || terrainType == 5;
+    }
+
+    private static boolean isInfdevVisualTerrain(int terrainType) {
+        return terrainType == 6 || terrainType == 7;
     }
 
     private byte getClientDimension(WorldServer worldserver) {

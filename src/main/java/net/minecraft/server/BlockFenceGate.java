@@ -42,7 +42,7 @@ public class BlockFenceGate extends Block {
 
 	@Override // Assuming this is the intended override based on common practice
 	public boolean canPlace(World var1, int var2, int var3, int var4) { // Renamed from canPlaceBlockAt, super call changed
-		return !var1.getMaterial(var2, var3 - 1, var4).isSolid() ? false : super.canPlace(var1, var2, var3, var4); // getBlockMaterial -> getMaterial, super.canPlaceBlockAt -> super.canPlace
+		return super.canPlace(var1, var2, var3, var4);
 	}
 
 	@Override // This is the critical change for collision
@@ -65,16 +65,19 @@ public class BlockFenceGate extends Block {
 		}
 	}
 
-	public boolean isOpaqueCube() {
+	@Override
+	public boolean a() {
 		return false;
 	}
 
-	public boolean renderAsNormalBlock() {
+	@Override
+	public boolean b() {
 		return false;
 	}
 
-	public int getRenderType() {
-		return 21; // Typically a custom render type ID for non-standard blocks
+	@Override
+	public int e() {
+		return 21;
 	}
 
 	// Renamed from onBlockPlacedBy to postPlace to match Block.java's method called by ItemBlock

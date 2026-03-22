@@ -525,10 +525,16 @@ public final class CraftServer implements Server {
             generator = getGenerator(name);
         }
 
-        Convertable converter = new WorldLoaderServer(folder);
+        Convertable converter = new WorldLoaderServer(new File("."));
         if (converter.isConvertable(name)) {
             getLogger().info("Converting world '" + name + "'");
             converter.convert(name, new ConvertProgressUpdater(console));
+        }
+
+        try {
+            RegionCoreWorldUpgrader.upgradeWorldToRegionCore(folder, getLogger());
+        } catch (RuntimeException conversionFailure) {
+            throw new IllegalStateException("Failed to upgrade world '" + name + "' to RegionCore", conversionFailure);
         }
 
         int dimension = 10 + console.worlds.size();

@@ -77,14 +77,14 @@ public class BlockRedstoneTorch extends BlockTorch {
         if (!this.isOn) {
             return false;
         } else {
-            int i1 = iblockaccess.getData(i, j, k);
+            int i1 = CriticalBlockStateAccess.getTorchMetadata(iblockaccess, i, j, k);
 
             return i1 == 5 && l == 1 ? false : (i1 == 3 && l == 3 ? false : (i1 == 4 && l == 2 ? false : (i1 == 1 && l == 5 ? false : i1 != 2 || l != 4)));
         }
     }
 
     private boolean g(World world, int i, int j, int k) {
-        int l = world.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getTorchMetadata(world, i, j, k);
 
         return l == 5 && world.isBlockFaceIndirectlyPowered(i, j - 1, k, 0) ? true : (l == 3 && world.isBlockFaceIndirectlyPowered(i, j, k - 1, 2) ? true : (l == 4 && world.isBlockFaceIndirectlyPowered(i, j, k + 1, 3) ? true : (l == 1 && world.isBlockFaceIndirectlyPowered(i - 1, j, k, 4) ? true : l == 2 && world.isBlockFaceIndirectlyPowered(i + 1, j, k, 5))));
     }
@@ -116,7 +116,15 @@ public class BlockRedstoneTorch extends BlockTorch {
                 }
                 // CraftBukkit end
 
-                world.setTypeIdAndData(i, j, k, Block.REDSTONE_TORCH_OFF.id, world.getData(i, j, k));
+                CriticalBlockStateAccess.setLegacyState(
+                        world,
+                        i,
+                        j,
+                        k,
+                        Block.REDSTONE_TORCH_OFF.id,
+                        CriticalBlockStateAccess.getTorchMetadata(world, i, j, k),
+                        true
+                );
                 if (this.a(world, i, j, k, true)) {
                     world.makeSound((double) ((float) i + 0.5F), (double) ((float) j + 0.5F), (double) ((float) k + 0.5F), "random.fizz", 0.5F, 2.6F + (world.random.nextFloat() - world.random.nextFloat()) * 0.8F);
 
@@ -140,7 +148,15 @@ public class BlockRedstoneTorch extends BlockTorch {
             }
             // CraftBukkit end
 
-            world.setTypeIdAndData(i, j, k, Block.REDSTONE_TORCH_ON.id, world.getData(i, j, k));
+            CriticalBlockStateAccess.setLegacyState(
+                    world,
+                    i,
+                    j,
+                    k,
+                    Block.REDSTONE_TORCH_ON.id,
+                    CriticalBlockStateAccess.getTorchMetadata(world, i, j, k),
+                    true
+            );
         }
     }
 

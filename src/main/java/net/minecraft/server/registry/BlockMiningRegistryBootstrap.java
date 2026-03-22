@@ -9,7 +9,7 @@ import net.minecraft.server.Material;
  */
 public final class BlockMiningRegistryBootstrap {
     private static final BlockMiningRule RULE_AXE_15 = new BlockMiningRule(MiningToolType.AXE, false, 1.5F);
-    private static final BlockMiningRule RULE_AXE_15_ENFORCED = new BlockMiningRule(MiningToolType.AXE, true, 1.5F);
+    private static final BlockMiningRule RULE_AXE_15_ENFORCED_ALLOW_ANY_DROP = new BlockMiningRule(MiningToolType.AXE, true, 1.5F, true);
     private static final BlockMiningRule RULE_PICKAXE_6 = new BlockMiningRule(MiningToolType.PICKAXE, false, 6.0F);
     private static final BlockMiningRule RULE_PICKAXE_2 = new BlockMiningRule(MiningToolType.PICKAXE, false, 2.0F);
     private static final BlockMiningRule RULE_PICKAXE_175 = new BlockMiningRule(MiningToolType.PICKAXE, false, 1.75F);
@@ -129,8 +129,8 @@ public final class BlockMiningRegistryBootstrap {
             BlockMiningRegistryApi.registerMetadataRule(Block.DOUBLE_STEP, metadata, RULE_PICKAXE_175);
         }
 
-        BlockMiningRegistryApi.registerMetadataRule(Block.STEP, 2, RULE_AXE_15_ENFORCED);
-        BlockMiningRegistryApi.registerMetadataRule(Block.DOUBLE_STEP, 2, RULE_AXE_15_ENFORCED);
+        BlockMiningRegistryApi.registerMetadataRule(Block.STEP, 2, RULE_AXE_15_ENFORCED_ALLOW_ANY_DROP);
+        BlockMiningRegistryApi.registerMetadataRule(Block.DOUBLE_STEP, 2, RULE_AXE_15_ENFORCED_ALLOW_ANY_DROP);
     }
 
     private static void register(Block block, BlockMiningRule rule) {

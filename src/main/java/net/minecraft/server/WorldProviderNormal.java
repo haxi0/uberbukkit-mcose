@@ -18,7 +18,7 @@ public class WorldProviderNormal extends WorldProvider {
             int terrainType = this.a.worldData.getTerrainType();
             MinecraftServer.log.info("[WorldProviderNormal] Initializing WorldChunkManager for world: " + this.a.worldData.name + " (TerrainType ID: " + terrainType + ")");
 
-            if (terrainType == 1 || terrainType == 5) { // 1 for ALPHA, 5 for ALPHA_SNOW
+            if (terrainType == 1 || terrainType == 5 || terrainType == 7) { // 1=ALPHA, 5=ALPHA_SNOW, 7=INFDEV
                 boolean snowWorld = (terrainType == 5) || (this.a.worldData != null && this.a.worldData.isSnowWorld());
                 this.b = new WorldChunkManagerAlpha(snowWorld ? BiomeBase.TAIGA : BiomeBase.PLAINS, this.a.getSeed(), snowWorld);
             } else if (terrainType == 6) { // 6 for CLASSIC
@@ -49,6 +49,8 @@ public class WorldProviderNormal extends WorldProvider {
 
             if (terrainType == 1 || terrainType == 5) { // 1 for ALPHA, 5 for ALPHA_SNOW
                 return new net.minecraft.server.Alpha.AlphaChunkProvider(this.a, this.a.getSeed(), false);
+            } else if (terrainType == 7) { // 7 for INFDEV
+                return new net.minecraft.server.Infdev.InfdevChunkProvider(this.a, this.a.getSeed());
             } else if (terrainType == 6) { // 6 for CLASSIC
                 return new net.minecraft.server.Classic.ChunkProviderClassic(this.a, this.a.getSeed());
             } else if (terrainType == 2) { // 2 for FLAT

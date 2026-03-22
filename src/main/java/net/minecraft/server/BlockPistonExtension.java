@@ -15,7 +15,7 @@ public class BlockPistonExtension extends Block {
 
     public void remove(World world, int i, int j, int k) {
         super.remove(world, i, j, k);
-        int l = world.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getPistonMetadata(world, i, j, k);
         if (l < 0 || l == 6 || l == 7 || l > 13) return; // CraftBukkit - fixed a piston AIOOBE issue.
         int i1 = PistonBlockTextures.a[b(l)];
 
@@ -25,7 +25,7 @@ public class BlockPistonExtension extends Block {
         int j1 = world.getTypeId(i, j, k);
 
         if (j1 == Block.PISTON.id || j1 == Block.PISTON_STICKY.id) {
-            l = world.getData(i, j, k);
+            l = CriticalBlockStateAccess.getPistonMetadata(world, i, j, k);
             if (BlockPiston.d(l)) {
                 Block.byId[j1].g(world, i, j, k, l);
                 world.setTypeId(i, j, k, 0);
@@ -60,7 +60,7 @@ public class BlockPistonExtension extends Block {
     }
 
     public void a(World world, int i, int j, int k, AxisAlignedBB axisalignedbb, ArrayList arraylist) {
-        int l = world.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getPistonMetadata(world, i, j, k);
 
         switch (b(l)) {
             case 0:
@@ -109,7 +109,7 @@ public class BlockPistonExtension extends Block {
     }
 
     public void a(IBlockAccess iblockaccess, int i, int j, int k) {
-        int l = iblockaccess.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getPistonMetadata(iblockaccess, i, j, k);
 
         switch (b(l)) {
             case 0:
@@ -138,7 +138,7 @@ public class BlockPistonExtension extends Block {
     }
 
     public void doPhysics(World world, int i, int j, int k, int l) {
-        int i1 = b(world.getData(i, j, k));
+        int i1 = b(CriticalBlockStateAccess.getPistonMetadata(world, i, j, k));
         if (i1 > 5 || i1 < 0) return; // CraftBukkit - fixed a piston AIOOBE issue.
         int j1 = world.getTypeId(i - PistonBlockTextures.b[i1], j - PistonBlockTextures.c[i1], k - PistonBlockTextures.d[i1]);
 

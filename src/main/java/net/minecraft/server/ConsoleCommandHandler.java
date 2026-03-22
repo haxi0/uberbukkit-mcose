@@ -13,6 +13,8 @@ import java.util.logging.Logger;
 public class ConsoleCommandHandler {
 
     private static Logger a = Logger.getLogger("Minecraft");
+    private static final int RELIGHT_MAX_RADIUS = 8;
+    private static final int RELIGHT_MAX_LIGHTING_PASSES = 4096;
     private MinecraftServer server;
     private ICommandListener listener; // CraftBukkit
 
@@ -276,6 +278,9 @@ public class ConsoleCommandHandler {
                     } else if (s.toLowerCase().startsWith("profile")) {
                         if (!checkPermission(listener, "profile")) return true;
                         handleProfileCommand(s, icommandlistener, s1);
+                    } else if (s.toLowerCase().startsWith("relight")) {
+                        if (!checkPermission(listener, "relight")) return true;
+                        handleRelightCommand(s, icommandlistener, s1, serverconfigurationmanager);
                     } else if (s.toLowerCase().startsWith("vanish")) {
                         // Toggle vanish state for the executor if it is a player; otherwise require a target
                         org.bukkit.command.CommandSender sender = null;
@@ -411,6 +416,7 @@ public class ConsoleCommandHandler {
         icommandlistener.sendMessage("   say <message>             broadcasts a message to all players");
         icommandlistener.sendMessage("   time <add|set> <amount>   adds to or sets the world time (0-24000)");
         icommandlistener.sendMessage("   profile <start|stop|report|save|snapshot|clear|status>  performance profiler commands");
+        icommandlistener.sendMessage("   relight [player|chunkX chunkZ] [radius] [dimension]      relight loaded chunks to fix stale light");
     }
 
     private void print(String s, String s1) {
@@ -452,6 +458,215 @@ public class ConsoleCommandHandler {
         } catch (NumberFormatException numberformatexception) {
             return i;
         }
+    }
+
+    private boolean isInteger(String input) {
+        if (input == null || input.length() == 0) {
+            return false;
+        }
+
+        int start = (input.charAt(0) == '-' || input.charAt(0) == '+') ? 1 : 0;
+        if (start == input.length()) {
+            return false;
+        }
+
+        for (int i = start; i < input.length(); ++i) {
+            if (!Character.isDigit(input.charAt(i))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private int clampRelightRadius(int radius) {
+        if (radius < 0) {
+            return 0;
+        }
+
+        if (radius > RELIGHT_MAX_RADIUS) {
+            return RELIGHT_MAX_RADIUS;
+        }
+
+        return radius;
+    }
+
+    private void sendRelightUsage(ICommandListener commandListener) {
+        commandListener.sendMessage("Usage: relight");
+        commandListener.sendMessage("   relight [radius]                     (player only)");
+        commandListener.sendMessage("   relight <player> [radius]");
+        commandListener.sendMessage("   relight <chunkX> <chunkZ> [radius] [dimension]");
+        commandListener.sendMessage("Notes: only loaded chunks are touched; max radius is " + RELIGHT_MAX_RADIUS + " chunks.");
+    }
+
+    private WorldServer getWorldByDimensionExact(int dimension) {
+        for (int i = 0; i < this.server.worlds.size(); ++i) {
+            WorldServer world = this.server.worlds.get(i);
+            if (world.dimension == dimension) {
+                return world;
+            }
+        }
+
+        return null;
+    }
+
+    private void queueRelightForChunk(WorldServer world, int chunkX, int chunkZ) {
+        int minX = chunkX << 4;
+        int minZ = chunkZ << 4;
+        int maxX = minX + 15;
+        int maxZ = minZ + 15;
+
+        world.a(EnumSkyBlock.SKY, minX, 0, minZ, maxX, 127, maxZ);
+        world.a(EnumSkyBlock.BLOCK, minX, 0, minZ, maxX, 127, maxZ);
+        world.b(minX, 0, minZ, maxX, 127, maxZ);
+    }
+
+    private void runRelight(WorldServer world, int centerChunkX, int centerChunkZ, int radius, ICommandListener commandListener, String senderName, String originLabel) {
+        long startedAt = System.currentTimeMillis();
+        int relitChunks = 0;
+        int skippedChunks = 0;
+
+        for (int chunkX = centerChunkX - radius; chunkX <= centerChunkX + radius; ++chunkX) {
+            for (int chunkZ = centerChunkZ - radius; chunkZ <= centerChunkZ + radius; ++chunkZ) {
+                int blockX = (chunkX << 4) + 8;
+                int blockZ = (chunkZ << 4) + 8;
+                if (!world.isLoaded(blockX, 64, blockZ)) {
+                    ++skippedChunks;
+                    continue;
+                }
+
+                this.queueRelightForChunk(world, chunkX, chunkZ);
+                ++relitChunks;
+            }
+        }
+
+        int lightingPasses = 0;
+        boolean hasMoreWork = false;
+
+        if (relitChunks > 0) {
+            do {
+                hasMoreWork = world.doLighting();
+                ++lightingPasses;
+            } while (hasMoreWork && lightingPasses < RELIGHT_MAX_LIGHTING_PASSES);
+        }
+
+        String worldName = world.getWorld() != null ? world.getWorld().getName() : ("dim=" + world.dimension);
+        long elapsedMs = System.currentTimeMillis() - startedAt;
+        this.print(senderName, "Relight complete in " + worldName + " around " + originLabel + " (radius " + radius + "): relit " + relitChunks + " loaded chunks, skipped " + skippedChunks + " unloaded chunks, lighting passes " + lightingPasses + ", " + elapsedMs + " ms.");
+
+        if (hasMoreWork) {
+            commandListener.sendMessage("Relight queue still has pending work; remaining light updates will continue over subsequent ticks.");
+        }
+    }
+
+    private void handleRelightCommand(String command, ICommandListener commandListener, String senderName, ServerConfigurationManager serverconfigurationmanager) {
+        String[] parts = command.trim().split("\\s+");
+        NetServerHandler senderHandler = commandListener instanceof NetServerHandler ? (NetServerHandler) commandListener : null;
+        EntityPlayer senderPlayer = senderHandler != null ? senderHandler.player : null;
+        int senderChunkX = senderPlayer != null ? MathHelper.floor(senderPlayer.locX) >> 4 : 0;
+        int senderChunkZ = senderPlayer != null ? MathHelper.floor(senderPlayer.locZ) >> 4 : 0;
+        WorldServer senderWorld = senderPlayer != null ? senderPlayer.getWorldServer() : this.server.getWorldServer(0);
+        int radius = 0;
+        int centerChunkX;
+        int centerChunkZ;
+        WorldServer world;
+        String originLabel;
+
+        if (parts.length == 1) {
+            if (senderPlayer == null) {
+                this.sendRelightUsage(commandListener);
+                return;
+            }
+
+            centerChunkX = senderChunkX;
+            centerChunkZ = senderChunkZ;
+            world = senderWorld;
+            originLabel = "player " + senderPlayer.name;
+        } else if (parts.length == 2) {
+            if (this.isInteger(parts[1])) {
+                if (senderPlayer == null) {
+                    this.sendRelightUsage(commandListener);
+                    return;
+                }
+
+                radius = this.a(parts[1], 0);
+                centerChunkX = senderChunkX;
+                centerChunkZ = senderChunkZ;
+                world = senderWorld;
+                originLabel = "player " + senderPlayer.name;
+            } else {
+                EntityPlayer target = serverconfigurationmanager.i(parts[1]);
+                if (target == null) {
+                    commandListener.sendMessage("Can't find user " + parts[1] + ". No relight performed.");
+                    return;
+                }
+
+                centerChunkX = MathHelper.floor(target.locX) >> 4;
+                centerChunkZ = MathHelper.floor(target.locZ) >> 4;
+                world = target.getWorldServer();
+                originLabel = "player " + target.name;
+            }
+        } else if (parts.length == 3 && this.isInteger(parts[1]) && this.isInteger(parts[2])) {
+            centerChunkX = this.a(parts[1], 0);
+            centerChunkZ = this.a(parts[2], 0);
+            world = senderWorld;
+            originLabel = "chunk " + centerChunkX + "," + centerChunkZ;
+        } else if (parts.length == 3) {
+            EntityPlayer target = serverconfigurationmanager.i(parts[1]);
+            if (target == null) {
+                commandListener.sendMessage("Can't find user " + parts[1] + ". No relight performed.");
+                return;
+            }
+
+            if (!this.isInteger(parts[2])) {
+                this.sendRelightUsage(commandListener);
+                return;
+            }
+
+            radius = this.a(parts[2], 0);
+            centerChunkX = MathHelper.floor(target.locX) >> 4;
+            centerChunkZ = MathHelper.floor(target.locZ) >> 4;
+            world = target.getWorldServer();
+            originLabel = "player " + target.name;
+        } else if (this.isInteger(parts[1]) && this.isInteger(parts[2])) {
+            centerChunkX = this.a(parts[1], 0);
+            centerChunkZ = this.a(parts[2], 0);
+            if (this.isInteger(parts[3])) {
+                radius = this.a(parts[3], 0);
+            } else {
+                this.sendRelightUsage(commandListener);
+                return;
+            }
+
+            int dimension = senderWorld.dimension;
+            if (parts.length >= 5) {
+                if (!this.isInteger(parts[4])) {
+                    this.sendRelightUsage(commandListener);
+                    return;
+                }
+
+                dimension = this.a(parts[4], dimension);
+            }
+
+            WorldServer explicitWorld = this.getWorldByDimensionExact(dimension);
+            if (explicitWorld == null) {
+                commandListener.sendMessage("No world loaded for dimension " + dimension + ".");
+                return;
+            }
+
+            world = explicitWorld;
+            originLabel = "chunk " + centerChunkX + "," + centerChunkZ;
+        } else {
+            this.sendRelightUsage(commandListener);
+            return;
+        }
+
+        int clampedRadius = this.clampRelightRadius(radius);
+        if (clampedRadius != radius) {
+            commandListener.sendMessage("Radius " + radius + " is out of bounds; using " + clampedRadius + " instead.");
+        }
+
+        this.runRelight(world, centerChunkX, centerChunkZ, clampedRadius, commandListener, senderName, originLabel);
     }
     
     /**

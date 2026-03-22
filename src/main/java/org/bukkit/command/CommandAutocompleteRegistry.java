@@ -789,8 +789,18 @@ public final class CommandAutocompleteRegistry {
         registerBuiltinArgument(ARG_GAMERULE_NAME, new ArgumentProvider() {
             public List<String> suggest(CommandSender sender, String[] args, int argIndex, String prefixLower) {
                 ArrayList<String> values = new ArrayList<String>();
-                values.addAll(Arrays.asList(BOOLEAN_GAMERULES));
-                values.addAll(Arrays.asList(INTEGER_GAMERULES));
+                String typed = argAt(args, argIndex);
+                boolean preferLowerCase = typed != null && typed.length() > 0 && typed.equals(typed.toLowerCase(Locale.ROOT));
+
+                for (int i = 0; i < BOOLEAN_GAMERULES.length; i++) {
+                    String value = BOOLEAN_GAMERULES[i];
+                    values.add(preferLowerCase ? value.toLowerCase(Locale.ROOT) : value);
+                }
+
+                for (int i = 0; i < INTEGER_GAMERULES.length; i++) {
+                    String value = INTEGER_GAMERULES[i];
+                    values.add(preferLowerCase ? value.toLowerCase(Locale.ROOT) : value);
+                }
                 return filterStrings(values, prefixLower);
             }
 
@@ -907,6 +917,16 @@ public final class CommandAutocompleteRegistry {
 
         registerSpecInternal(BUILTIN_OWNER, "profile", new String[] { "profiler" }, new String[][] {
             { ARG_PROFILE_ACTION }
+        }, true);
+
+        registerSpecInternal(BUILTIN_OWNER, "relight", new String[0], new String[][] {
+            {},
+            { ARG_INTEGER },
+            { ARG_PLAYER },
+            { ARG_PLAYER, ARG_INTEGER },
+            { ARG_INTEGER, ARG_INTEGER },
+            { ARG_INTEGER, ARG_INTEGER, ARG_INTEGER },
+            { ARG_INTEGER, ARG_INTEGER, ARG_INTEGER, ARG_INTEGER }
         }, true);
 
         registerSpecInternal(BUILTIN_OWNER, "debug", new String[0], new String[][] {

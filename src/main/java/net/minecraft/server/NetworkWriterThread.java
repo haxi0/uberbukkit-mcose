@@ -15,67 +15,39 @@ class NetworkWriterThread extends Thread {
     }
 
     public void run() {
-        Object object = NetworkManager.a;
-
         synchronized (NetworkManager.a) {
             ++NetworkManager.c;
         }
 
-        while (true) {
-            boolean flag = false;
-
-            try {
-                flag = true;
-                if (!NetworkManager.a(this.a)) {
-                    flag = false;
-                    break;
-                }
-
+        try {
+            while (NetworkManager.a(this.a)) {
+                boolean sentAnyPackets = false;
                 while (NetworkManager.d(this.a)) {
-                    ;
+                    sentAnyPackets = true;
                 }
 
-                if (!this.fast) { // Poseidon
+                if (sentAnyPackets) {
                     try {
-                        sleep(100L);
-                    } catch (InterruptedException interruptedexception) {
-                        ;
+                        if (NetworkManager.e(this.a) != null) {
+                            NetworkManager.e(this.a).flush();
+                        }
+                    } catch (IOException ioexception) {
+                        if (!NetworkManager.f(this.a)) {
+                            NetworkManager.a(this.a, (Exception) ioexception);
+                        }
                     }
                 }
 
                 try {
-                    if (NetworkManager.e(this.a) != null) {
-                        NetworkManager.e(this.a).flush();
-                    }
-                } catch (IOException ioexception) {
-                    if (!NetworkManager.f(this.a)) {
-                        NetworkManager.a(this.a, (Exception) ioexception);
-                    }
-
-                    //ioexception.printStackTrace(); //Project Poseidon Remove - Credit to Notcz in Modification Station
-                }
-
-                if (this.fast) { // Poseidon
-                    try {
-                        sleep(2L);
-                    } catch (InterruptedException interruptedexception) {
-                        ;
-                    }
-                }
-            } finally {
-                if (flag) {
-                    Object object1 = NetworkManager.a;
-
-                    synchronized (NetworkManager.a) {
-                        --NetworkManager.c;
-                    }
+                    sleep(this.fast ? 2L : 100L);
+                } catch (InterruptedException interruptedexception) {
+                    ;
                 }
             }
-        }
-
-        object = NetworkManager.a;
-        synchronized (NetworkManager.a) {
-            --NetworkManager.c;
+        } finally {
+            synchronized (NetworkManager.a) {
+                --NetworkManager.c;
+            }
         }
     }
 }

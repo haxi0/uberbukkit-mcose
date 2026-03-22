@@ -7,6 +7,7 @@ import org.bukkit.event.entity.EntityTargetEvent;
 // CraftBukkit end
 
 public class EntityGhast extends EntityFlying implements IMonster {
+    private static final EntityDataAccessor<Byte> DATA_ATTACKING_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
 
     public int a = 0;
     public double b;
@@ -24,14 +25,27 @@ public class EntityGhast extends EntityFlying implements IMonster {
         this.fireProof = true;
     }
 
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.getSynchedEntityData().define(DATA_ATTACKING_ID, Byte.valueOf((byte)0));
+    }
+
     protected void b() {
         super.b();
-        this.datawatcher.a(16, Byte.valueOf((byte) 0));
+        this.datawatcher.a(16, Byte.valueOf(this.getAttackState()));
+    }
+
+    public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+        super.onSyncedDataUpdated(accessor);
+        if (accessor == DATA_ATTACKING_ID) {
+            Byte value = this.getSynchedEntityData().get(DATA_ATTACKING_ID);
+            this.datawatcher.watch(16, value == null ? Byte.valueOf((byte)0) : value);
+        }
     }
 
     public void m_() {
         super.m_();
-        byte b0 = this.datawatcher.a(16);
+        byte b0 = this.getAttackState();
 
         this.texture = b0 == 1 ? "/mob/ghast_fire.png" : "/mob/ghast.png";
     }
@@ -154,11 +168,9 @@ public class EntityGhast extends EntityFlying implements IMonster {
         }
 
         if (!this.world.isStatic) {
-            byte b0 = this.datawatcher.a(16);
             byte b1 = (byte) (this.f > 10 ? 1 : 0);
-
-            if (b0 != b1) {
-                this.datawatcher.watch(16, Byte.valueOf(b1));
+            if (this.getAttackState() != b1) {
+                this.setAttackState(b1);
             }
         }
     }
@@ -205,5 +217,21 @@ public class EntityGhast extends EntityFlying implements IMonster {
 
     public int l() {
         return 1;
+    }
+
+    private byte getAttackState() {
+        Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_ATTACKING_ID);
+        if (value != null) {
+            return value.byteValue();
+        }
+        return this.datawatcher.a(16);
+    }
+
+    private void setAttackState(byte state) {
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_ATTACKING_ID, Byte.valueOf(state));
+        } else {
+            this.datawatcher.watch(16, Byte.valueOf(state));
+        }
     }
 }

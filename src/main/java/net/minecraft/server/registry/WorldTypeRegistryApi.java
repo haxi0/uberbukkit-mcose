@@ -16,6 +16,7 @@ public final class WorldTypeRegistryApi {
         ALIASES.addAlias("minecraft:sky", "sky");
         ALIASES.addAlias("minecraft:alpha_snow", "alpha_snow");
         ALIASES.addAlias("minecraft:classic", "classic");
+        ALIASES.addAlias("minecraft:infdev", "infdev");
     }
 
     private WorldTypeRegistryApi() {}
@@ -103,4 +104,3 @@ public final class WorldTypeRegistryApi {
         return RegistryApiSupport.resolveIdentifier(Registries.WORLD_TYPE, alias);
     }
 }
-

@@ -2,6 +2,9 @@ package net.minecraft.server.registry;
 
 import net.minecraft.server.Entity;
 import net.minecraft.server.EntityTypes;
+import net.minecraft.server.EntityTypeDef;
+import net.minecraft.server.Holder;
+import net.minecraft.server.MappedRegistry;
 import net.minecraft.server.util.ResourceLocation;
 
 import java.lang.reflect.Field;
@@ -22,6 +25,11 @@ public final class EntityTypeRegistry {
     private static final Map<ResourceLocation, Integer> keyToVariant = new HashMap<ResourceLocation, Integer>(); // e.g., minecart type
     private static final Map<ResourceLocation, Integer> keyToLegacyId = new HashMap<ResourceLocation, Integer>();
     private static final Map<Integer, ResourceLocation> legacyIdToKey = new HashMap<Integer, ResourceLocation>();
+    private static final Map<ResourceLocation, String> keyToLegacyName = new HashMap<ResourceLocation, String>();
+    private static final Map<Class<?>, String> legacyNameByClass = new IdentityHashMap<Class<?>, String>();
+    private static final Map<ResourceLocation, EntityTypeDef<?>> defByKey = new LinkedHashMap<ResourceLocation, EntityTypeDef<?>>();
+    private static final Map<Class<?>, EntityTypeDef<?>> defByClass = new IdentityHashMap<Class<?>, EntityTypeDef<?>>();
+    private static final MappedRegistry<EntityTypeDef<?>> runtimeTypeRegistry = new MappedRegistry<EntityTypeDef<?>>();
     private static boolean scanned = false;
 
     private EntityTypeRegistry() {}
@@ -33,6 +41,8 @@ public final class EntityTypeRegistry {
         byKey.put(key, entityClass);
         if (!keyOf.containsKey(entityClass)) keyOf.put(entityClass, key);
         cacheLegacyMapping(key, entityClass);
+        cacheLegacyNameMapping(key, entityClass);
+        registerTypeDefinition(key, entityClass);
         try { Registries.ENTITY_TYPE.registerIfAbsent(key, entityClass); } catch (Throwable ignored) {}
         return true;
     }
@@ -50,6 +60,8 @@ public final class EntityTypeRegistry {
         if (!byKey.containsKey(alias)) {
             byKey.put(alias, entityClass);
             cacheLegacyMapping(alias, entityClass);
+            cacheLegacyNameMapping(alias, entityClass);
+            registerTypeDefinition(alias, entityClass);
         }
     }
 
@@ -85,6 +97,47 @@ public final class EntityTypeRegistry {
     public static ResourceLocation getKeyByLegacyId(int legacyId) {
         ensureScanned();
         return legacyIdToKey.get(Integer.valueOf(legacyId));
+    }
+
+    public static String getLegacyName(ResourceLocation key) {
+        if (key == null) return null;
+        ensureScanned();
+        return keyToLegacyName.get(key);
+    }
+
+    public static EntityTypeDef<?> getType(ResourceLocation key) {
+        if (key == null) return null;
+        ensureScanned();
+        return defByKey.get(key);
+    }
+
+    public static EntityTypeDef<?> getType(Class<?> entityClass) {
+        if (entityClass == null) return null;
+        ensureScanned();
+        return defByClass.get(entityClass);
+    }
+
+    public static Holder<EntityTypeDef<?>> getTypeHolder(ResourceLocation key) {
+        if (key == null) return null;
+        ensureScanned();
+        return runtimeTypeRegistry.getHolder(key);
+    }
+
+    public static Holder<EntityTypeDef<?>> getTypeHolder(Class<?> entityClass) {
+        if (entityClass == null) return null;
+        ensureScanned();
+        EntityTypeDef<?> def = defByClass.get(entityClass);
+        return def == null ? null : runtimeTypeRegistry.getHolder(def);
+    }
+
+    public static Holder<EntityTypeDef<?>> getTypeHolder(Entity entity) {
+        if (entity == null) return null;
+        return getTypeHolder(entity.getClass());
+    }
+
+    public static EntityTypeDef<?> getTypeByRuntimeId(int runtimeId) {
+        ensureScanned();
+        return runtimeTypeRegistry.byId(runtimeId);
     }
 
     public static String normalizeInputIdentifier(String any) {
@@ -172,6 +225,8 @@ public final class EntityTypeRegistry {
             byKey.put(pref, clazz);
             keyOf.put(clazz, pref);
             cacheLegacyMapping(pref, clazz);
+            cacheLegacyNameMapping(pref, clazz);
+            registerTypeDefinition(pref, clazz);
         }
     }
 
@@ -190,6 +245,40 @@ public final class EntityTypeRegistry {
         }
     }
 
+    private static void cacheLegacyNameMapping(ResourceLocation key, Class<?> entityClass) {
+        String legacyName = resolveLegacyNameForClass(entityClass);
+        if (legacyName == null || legacyName.length() == 0) {
+            return;
+        }
+        keyToLegacyName.put(key, legacyName);
+        if (!legacyNameByClass.containsKey(entityClass)) {
+            legacyNameByClass.put(entityClass, legacyName);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void registerTypeDefinition(ResourceLocation key, Class<?> entityClass) {
+        if (!Entity.class.isAssignableFrom(entityClass)) {
+            return;
+        }
+
+        EntityTypeDef<?> existingByClass = defByClass.get(entityClass);
+        if (existingByClass != null) {
+            defByKey.put(key, existingByClass);
+            Integer legacyId = keyToLegacyId.get(key);
+            int preferredId = legacyId == null ? -1 : legacyId.intValue();
+            runtimeTypeRegistry.registerIfAbsent(key, existingByClass, preferredId);
+            return;
+        }
+
+        Integer legacyId = keyToLegacyId.get(key);
+        int legacy = legacyId == null ? -1 : legacyId.intValue();
+        EntityTypeDef<?> def = new EntityTypeDef<Entity>(key, (Class<Entity>)entityClass, legacy);
+        defByClass.put(entityClass, def);
+        defByKey.put(key, def);
+        runtimeTypeRegistry.registerIfAbsent(key, def, legacy);
+    }
+
     private static Integer resolveLegacyIdForClass(Class<?> entityClass) {
         if (entityClass == null) {
             return null;
@@ -204,6 +293,25 @@ public final class EntityTypeRegistry {
             }
             Object value = map.get(entityClass);
             return value instanceof Integer ? (Integer) value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static String resolveLegacyNameForClass(Class<?> entityClass) {
+        if (entityClass == null) {
+            return null;
+        }
+
+        try {
+            Field classToName = EntityTypes.class.getDeclaredField("b"); // class -> string
+            classToName.setAccessible(true);
+            Map map = (Map)classToName.get(null);
+            if (map == null) {
+                return null;
+            }
+            Object value = map.get(entityClass);
+            return value instanceof String ? (String)value : null;
         } catch (Throwable ignored) {
             return null;
         }

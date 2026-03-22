@@ -6,6 +6,10 @@ import java.util.Random;
 
 public class BlockChest extends BlockContainer {
 
+    private static final int FACING_NORTH = 2;
+    private static final int FACING_SOUTH = 3;
+    private static final int FACING_WEST = 4;
+    private static final int FACING_EAST = 5;
     private Random a = new Random();
 
     protected BlockChest(int i) {
@@ -15,6 +19,140 @@ public class BlockChest extends BlockContainer {
 
     public int a(int i) {
         return i == 1 ? this.textureId - 1 : (i == 0 ? this.textureId - 1 : (i == 3 ? this.textureId + 1 : this.textureId));
+    }
+
+    private static boolean isSolidForChestOrientation(int blockId) {
+        if (blockId < 0 || blockId >= Block.o.length || !Block.o[blockId]) {
+            return false;
+        }
+
+        if (blockId == Block.FURNACE.id || blockId == Block.BURNING_FURNACE.id) {
+            return false;
+        }
+
+        if (blockId == Block.WORKBENCH.id) {
+            return false;
+        }
+
+        if (blockId == Block.JUKEBOX.id) {
+            return false;
+        }
+
+        if (blockId == Block.PUMPKIN.id || blockId == Block.JACK_O_LANTERN.id) {
+            return false;
+        }
+
+        if (blockId == Block.DISPENSER.id) {
+            return false;
+        }
+
+        return blockId != Block.NOTE_BLOCK.id;
+    }
+
+    private static boolean isValidHorizontalFacing(int metadata) {
+        return metadata == FACING_NORTH || metadata == FACING_SOUTH || metadata == FACING_WEST || metadata == FACING_EAST;
+    }
+
+    private static int normalizeHorizontalFacing(int metadata, int fallback) {
+        return isValidHorizontalFacing(metadata) ? metadata : fallback;
+    }
+
+    private int inferFacingFromSurroundings(IBlockAccess blockAccess, int i, int j, int k) {
+        int northBlockId = blockAccess.getTypeId(i, j, k - 1);
+        int southBlockId = blockAccess.getTypeId(i, j, k + 1);
+        int westBlockId = blockAccess.getTypeId(i - 1, j, k);
+        int eastBlockId = blockAccess.getTypeId(i + 1, j, k);
+        int facing = FACING_SOUTH;
+
+        if (isSolidForChestOrientation(northBlockId) && !isSolidForChestOrientation(southBlockId)) {
+            facing = FACING_SOUTH;
+        }
+
+        if (isSolidForChestOrientation(southBlockId) && !isSolidForChestOrientation(northBlockId)) {
+            facing = FACING_NORTH;
+        }
+
+        if (isSolidForChestOrientation(westBlockId) && !isSolidForChestOrientation(eastBlockId)) {
+            facing = FACING_EAST;
+        }
+
+        if (isSolidForChestOrientation(eastBlockId) && !isSolidForChestOrientation(westBlockId)) {
+            facing = FACING_WEST;
+        }
+
+        return facing;
+    }
+
+    private int facingFromPlacer(EntityLiving entityliving) {
+        int direction = MathHelper.floor((double) (entityliving.yaw * 4.0F / 360.0F) + 0.5D) & 3;
+        if (direction == 0) {
+            return FACING_NORTH;
+        } else if (direction == 1) {
+            return FACING_EAST;
+        } else if (direction == 2) {
+            return FACING_SOUTH;
+        } else {
+            return FACING_WEST;
+        }
+    }
+
+    private int[] findAdjacentChest(IBlockAccess blockAccess, int i, int j, int k) {
+        if (blockAccess.getTypeId(i - 1, j, k) == this.id) return new int[] { i - 1, j, k };
+        if (blockAccess.getTypeId(i + 1, j, k) == this.id) return new int[] { i + 1, j, k };
+        if (blockAccess.getTypeId(i, j, k - 1) == this.id) return new int[] { i, j, k - 1 };
+        if (blockAccess.getTypeId(i, j, k + 1) == this.id) return new int[] { i, j, k + 1 };
+        return null;
+    }
+
+    private int resolveMergedFacing(int preferredFacing, int fallbackFacing, int dx, int dz) {
+        if (dx != 0) {
+            if (preferredFacing == FACING_NORTH || preferredFacing == FACING_SOUTH) {
+                return preferredFacing;
+            }
+
+            if (fallbackFacing == FACING_NORTH || fallbackFacing == FACING_SOUTH) {
+                return fallbackFacing;
+            }
+
+            return FACING_SOUTH;
+        }
+
+        if (dz != 0) {
+            if (preferredFacing == FACING_WEST || preferredFacing == FACING_EAST) {
+                return preferredFacing;
+            }
+
+            if (fallbackFacing == FACING_WEST || fallbackFacing == FACING_EAST) {
+                return fallbackFacing;
+            }
+
+            return FACING_EAST;
+        }
+
+        return preferredFacing;
+    }
+
+    public void c(World world, int i, int j, int k) {
+        super.c(world, i, j, k);
+        int currentMeta = world.getData(i, j, k);
+        if (!isValidHorizontalFacing(currentMeta)) {
+            int facing = this.inferFacingFromSurroundings(world, i, j, k);
+            world.setData(i, j, k, facing);
+        }
+    }
+
+    public void postPlace(World world, int i, int j, int k, EntityLiving entityliving) {
+        int preferredFacing = this.facingFromPlacer(entityliving);
+        int[] adjacent = this.findAdjacentChest(world, i, j, k);
+        int facing = preferredFacing;
+
+        if (adjacent != null) {
+            int neighborFacing = normalizeHorizontalFacing(world.getData(adjacent[0], adjacent[1], adjacent[2]), FACING_SOUTH);
+            facing = this.resolveMergedFacing(preferredFacing, neighborFacing, adjacent[0] - i, adjacent[2] - k);
+            world.setData(adjacent[0], adjacent[1], adjacent[2], facing);
+        }
+
+        world.setData(i, j, k, normalizeHorizontalFacing(facing, FACING_SOUTH));
     }
 
     public boolean canPlace(World world, int i, int j, int k) {

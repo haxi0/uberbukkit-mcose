@@ -11,6 +11,22 @@ public class FontAllowedCharacters {
     public FontAllowedCharacters() {
     }
 
+    public static boolean isAllowedCharacter(char c) {
+        if (allowedCharacters.indexOf(c) >= 0) {
+            return true;
+        }
+
+        if (c == '\u00A7') {
+            return false;
+        }
+
+        if (Character.isISOControl(c) || Character.isSurrogate(c)) {
+            return false;
+        }
+
+        return Character.isDefined(c);
+    }
+
     private static String a() {
         String s = "";
 

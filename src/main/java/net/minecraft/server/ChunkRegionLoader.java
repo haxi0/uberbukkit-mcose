@@ -19,17 +19,20 @@ public class ChunkRegionLoader implements IChunkLoader {
             if (!nbttagcompound.hasKey("Level")) {
                 System.out.println("Chunk file at " + i + "," + j + " is missing level data, skipping");
                 return null;
-            } else if (!nbttagcompound.k("Level").hasKey("Blocks")) {
+            }
+
+            NBTTagCompound level = nbttagcompound.k("Level");
+            if (!level.hasKey("Blocks") && !BlockStateCodec.hasStateData(level)) {
                 System.out.println("Chunk file at " + i + "," + j + " is missing block data, skipping");
                 return null;
             } else {
-                Chunk chunk = ChunkLoader.a(world, nbttagcompound.k("Level"));
+                Chunk chunk = ChunkLoader.a(world, level);
 
                 if (!chunk.a(i, j)) {
                     System.out.println("Chunk file at " + i + "," + j + " is in the wrong location; relocating. (Expected " + i + ", " + j + ", got " + chunk.x + ", " + chunk.z + ")");
                     nbttagcompound.a("xPos", i);
                     nbttagcompound.a("zPos", j);
-                    chunk = ChunkLoader.a(world, nbttagcompound.k("Level"));
+                    chunk = ChunkLoader.a(world, level);
                 }
 
                 chunk.h();

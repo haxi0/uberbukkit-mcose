@@ -14,6 +14,9 @@ import java.util.List;
 // CraftBukkit end
 
 public class EntityWolf extends EntityAnimal {
+    private static final EntityDataAccessor<Byte> DATA_WOLF_FLAGS_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<String> DATA_WOLF_OWNER_ID = new EntityDataAccessor<String>(17, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<Integer> DATA_WOLF_HEALTH_ID = new EntityDataAccessor<Integer>(18, EntityDataSerializers.INT);
 
     private boolean a = false;
     private float b;
@@ -29,13 +32,35 @@ public class EntityWolf extends EntityAnimal {
         this.b(0.8F, 0.8F);
         this.aE = 1.1F;
         this.health = 8;
+        this.setSyncedWolfHealth(this.health);
+    }
+
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.getSynchedEntityData().define(DATA_WOLF_FLAGS_ID, Byte.valueOf((byte)0));
+        this.getSynchedEntityData().define(DATA_WOLF_OWNER_ID, "");
+        this.getSynchedEntityData().define(DATA_WOLF_HEALTH_ID, Integer.valueOf(10));
     }
 
     protected void b() {
         super.b();
-        this.datawatcher.a(16, Byte.valueOf((byte) 0));
-        this.datawatcher.a(17, "");
-        this.datawatcher.a(18, new Integer(this.health));
+        this.datawatcher.a(16, Byte.valueOf(this.getWolfFlags()));
+        this.datawatcher.a(17, this.getWolfOwnerValue());
+        this.datawatcher.a(18, Integer.valueOf(this.getSyncedWolfHealth()));
+    }
+
+    public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+        super.onSyncedDataUpdated(accessor);
+        if (accessor == DATA_WOLF_FLAGS_ID) {
+            Byte value = this.getSynchedEntityData().get(DATA_WOLF_FLAGS_ID);
+            this.datawatcher.watch(16, value == null ? Byte.valueOf((byte)0) : value);
+        } else if (accessor == DATA_WOLF_OWNER_ID) {
+            String value = this.getSynchedEntityData().get(DATA_WOLF_OWNER_ID);
+            this.datawatcher.watch(17, value == null ? "" : value);
+        } else if (accessor == DATA_WOLF_HEALTH_ID) {
+            Integer value = this.getSynchedEntityData().get(DATA_WOLF_HEALTH_ID);
+            this.datawatcher.watch(18, Integer.valueOf(value == null ? this.health : value.intValue()));
+        }
     }
 
     protected boolean n() {
@@ -70,7 +95,7 @@ public class EntityWolf extends EntityAnimal {
     }
 
     protected String g() {
-        return this.isAngry() ? "mob.wolf.growl" : (this.random.nextInt(3) == 0 ? (this.isTamed() && this.datawatcher.b(18) < 10 ? "mob.wolf.whine" : "mob.wolf.panting") : "mob.wolf.bark");
+        return this.isAngry() ? "mob.wolf.growl" : (this.random.nextInt(3) == 0 ? (this.isTamed() && this.getSyncedWolfHealth() < 10 ? "mob.wolf.whine" : "mob.wolf.panting") : "mob.wolf.bark");
     }
 
     protected String h() {
@@ -135,7 +160,7 @@ public class EntityWolf extends EntityAnimal {
         }
 
         if (!this.world.isStatic) {
-            this.datawatcher.watch(18, Integer.valueOf(this.health));
+            this.setSyncedWolfHealth(this.health);
         }
     }
 
@@ -380,6 +405,7 @@ public class EntityWolf extends EntityAnimal {
                         this.setPathEntity((PathEntity) null);
                         this.setSitting(true);
                         this.health = 20;
+                        this.setSyncedWolfHealth(this.health);
                         this.setOwnerName(entityhuman.name);
                         this.a(true);
                         this.world.a(this, (byte) 7);
@@ -395,7 +421,7 @@ public class EntityWolf extends EntityAnimal {
             if (itemstack != null && Item.byId[itemstack.id] instanceof ItemFood) {
                 ItemFood itemfood = (ItemFood) Item.byId[itemstack.id];
 
-                if (itemfood.l() && this.datawatcher.b(18) < 20) {
+                if (itemfood.l() && this.getSyncedWolfHealth() < 20) {
                     --itemstack.count;
                     if (itemstack.count <= 0) {
                         entityhuman.inventory.setItem(entityhuman.inventory.itemInHandIndex, (ItemStack) null);
@@ -441,52 +467,102 @@ public class EntityWolf extends EntityAnimal {
     }
 
     public String getOwnerName() {
-        return this.datawatcher.c(17);
+        return this.getWolfOwnerValue();
     }
 
     public void setOwnerName(String s) {
-        this.datawatcher.watch(17, s);
+        this.setWolfOwnerValue(s);
     }
 
     public boolean isSitting() {
-        return (this.datawatcher.a(16) & 1) != 0;
+        return (this.getWolfFlags() & 1) != 0;
     }
 
     public void setSitting(boolean flag) {
-        byte b0 = this.datawatcher.a(16);
+        byte b0 = this.getWolfFlags();
 
         if (flag) {
-            this.datawatcher.watch(16, Byte.valueOf((byte) (b0 | 1)));
+            this.setWolfFlags((byte)(b0 | 1));
         } else {
-            this.datawatcher.watch(16, Byte.valueOf((byte) (b0 & -2)));
+            this.setWolfFlags((byte)(b0 & -2));
         }
     }
 
     public boolean isAngry() {
-        return (this.datawatcher.a(16) & 2) != 0;
+        return (this.getWolfFlags() & 2) != 0;
     }
 
     public void setAngry(boolean flag) {
-        byte b0 = this.datawatcher.a(16);
+        byte b0 = this.getWolfFlags();
 
         if (flag) {
-            this.datawatcher.watch(16, Byte.valueOf((byte) (b0 | 2)));
+            this.setWolfFlags((byte)(b0 | 2));
         } else {
-            this.datawatcher.watch(16, Byte.valueOf((byte) (b0 & -3)));
+            this.setWolfFlags((byte)(b0 & -3));
         }
     }
 
     public boolean isTamed() {
-        return (this.datawatcher.a(16) & 4) != 0;
+        return (this.getWolfFlags() & 4) != 0;
     }
 
     public void setTamed(boolean flag) {
-        byte b0 = this.datawatcher.a(16);
+        byte b0 = this.getWolfFlags();
 
         if (flag) {
-            this.datawatcher.watch(16, Byte.valueOf((byte) (b0 | 4)));
+            this.setWolfFlags((byte)(b0 | 4));
         } else {
-            this.datawatcher.watch(16, Byte.valueOf((byte) (b0 & -5)));
+            this.setWolfFlags((byte)(b0 & -5));
+        }
+    }
+
+    private byte getWolfFlags() {
+        Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_WOLF_FLAGS_ID);
+        if (value != null) {
+            return value.byteValue();
+        }
+        return this.datawatcher.a(16);
+    }
+
+    private void setWolfFlags(byte flags) {
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_WOLF_FLAGS_ID, Byte.valueOf(flags));
+        } else {
+            this.datawatcher.watch(16, Byte.valueOf(flags));
+        }
+    }
+
+    private String getWolfOwnerValue() {
+        String value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_WOLF_OWNER_ID);
+        if (value != null) {
+            return value;
+        }
+        String legacy = this.datawatcher.c(17);
+        return legacy == null ? "" : legacy;
+    }
+
+    private void setWolfOwnerValue(String owner) {
+        String value = owner == null ? "" : owner;
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_WOLF_OWNER_ID, value);
+        } else {
+            this.datawatcher.watch(17, value);
+        }
+    }
+
+    private int getSyncedWolfHealth() {
+        Integer value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_WOLF_HEALTH_ID);
+        if (value != null) {
+            return value.intValue();
+        }
+        return this.datawatcher.b(18);
+    }
+
+    private void setSyncedWolfHealth(int wolfHealth) {
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_WOLF_HEALTH_ID, Integer.valueOf(wolfHealth));
+        } else {
+            this.datawatcher.watch(18, Integer.valueOf(wolfHealth));
         }
     }
 }

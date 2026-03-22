@@ -281,6 +281,11 @@ public abstract class Packet {
         a(201, true, false, Packet201PlayerInfo.class);
         a(202, true, false, Packet202MapChunkZstd.class);
         a(203, true, true, Packet203TabComplete.class); // Tab completion request/response
+        a(204, true, false, Packet204AddEntityV2.class);
+        a(205, true, false, Packet205SetEntityDataV2.class);
+        a(206, true, false, Packet206EntityMoveV2.class);
+        a(207, true, false, Packet207EntityLinkV2.class);
+        a(208, true, false, Packet208EntityEquipmentV2.class);
         a(250, true, true, Packet250CustomPayload.class); // Custom payload for plugin channels
         a(255, true, true, Packet255KickDisconnect.class);
         packetClassToIdMap.put(ArtificialPacket53BlockChange.class, 53); //Poseidon - Artificial Block Change Packet

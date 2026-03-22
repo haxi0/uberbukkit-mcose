@@ -9,7 +9,11 @@ import com.legacyminecraft.poseidon.PoseidonConfig;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.logging.Logger;
 
 import me.devcody.uberbukkit.patch.Patches;
@@ -74,27 +78,40 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     // Vanilla ordering: no pre-login buffering required
     private boolean loginSent = true;
     private java.util.List preLoginWorldPackets = null;
-    // Keep an abuse guard for TCP voice failover, but set thresholds high enough so
-    // legitimate WAN jitter/burst delivery is not clipped.
-    private static final long VOICE_TCP_RATE_WINDOW_MS = 1000L;
-    private static final int VOICE_TCP_MAX_PACKETS_PER_WINDOW = 320;
-    private static final int VOICE_TCP_MAX_BYTES_PER_WINDOW = 512 * 1024;
-    private long voiceTcpWindowStartAt = 0L;
-    private int voiceTcpPacketsInWindow = 0;
-    private int voiceTcpBytesInWindow = 0;
-    private static final long VOICE_TCP_ATTEMPT_LOG_INTERVAL_MS = 1000L;
-    private static final long VOICE_TCP_DROP_LOG_INTERVAL_MS = 1500L;
-    private static final long VOICE_TCP_QUEUE_DROP_LOG_INTERVAL_MS = 1500L;
+    // Keep an abuse guard for TCP voice failover while allowing short WAN jitter bursts.
+    private static final boolean PARALLEL_CHAT_ENABLED = true;
+    private static final long PARALLEL_CHAT_RATE_WINDOW_MS = 2000L;
+    private static final int PARALLEL_CHAT_MAX_MESSAGES_PER_WINDOW = 8;
+    private static final boolean PARALLEL_VOICE_TCP_ENABLED = true;
+    private static final boolean PARALLEL_FAIL_OPEN_TO_LEGACY = true;
+    private static final long[] VOICE_TCP_QUEUE_WAIT_BUCKET_MS = new long[] {1L, 2L, 5L, 10L, 20L, 40L, 80L, 120L, 200L, 300L, 500L, 1000L};
+    private static final AtomicLong VOICE_TCP_ATTEMPTS_WINDOW = new AtomicLong();
+    private static final AtomicLong VOICE_TCP_QUEUE_OVERFLOW_WINDOW = new AtomicLong();
+    private static final AtomicLongArray VOICE_TCP_QUEUE_WAIT_BUCKETS_WINDOW = new AtomicLongArray(VOICE_TCP_QUEUE_WAIT_BUCKET_MS.length + 1);
+    private static final ConcurrentHashMap<String, AtomicLong> VOICE_TCP_DROP_REASONS_WINDOW = new ConcurrentHashMap<String, AtomicLong>();
+    private long voiceTcpLimiterLastRefillAt = 0L;
+    private double voiceTcpPacketTokens = 0.0D;
+    private double voiceTcpByteTokens = 0.0D;
+    private long parallelChatWindowStartAt = 0L;
+    private int parallelChatMessagesInWindow = 0;
+    private static final long VOICE_TCP_BACKLOG_LOG_INTERVAL_MS = 30000L;
     private static final int VOICE_TCP_INBOUND_QUEUE_MAX_PACKETS = 240;
-    private long lastVoiceTcpAttemptLogAt = 0L;
-    private long lastVoiceTcpDropLogAt = 0L;
-    private long lastVoiceTcpQueueDropLogAt = 0L;
+    private static final int VOICE_TCP_BACKLOG_WARN_QUEUE_DEPTH = 192;
+    private static final AtomicLong PARALLEL_VOICE_CONSUMED_TOTAL = new AtomicLong();
+    private static final AtomicLong PARALLEL_VOICE_DROPPED_RATE_TOTAL = new AtomicLong();
+    private static final AtomicLong PARALLEL_VOICE_DROPPED_INVALID_TOTAL = new AtomicLong();
+    private static final AtomicLong PARALLEL_VOICE_DROPPED_OVERFLOW_TOTAL = new AtomicLong();
+    private static final AtomicLong PARALLEL_VOICE_QUEUE_WAIT_NANOS_TOTAL = new AtomicLong();
+    private static final AtomicLong PARALLEL_VOICE_QUEUE_WAIT_SAMPLES_TOTAL = new AtomicLong();
+    private static final AtomicLong PARALLEL_VOICE_QUEUE_WAIT_MAX_NANOS_SINCE_POLL = new AtomicLong();
+    private long lastVoiceTcpBacklogLogAt = 0L;
+    private long voiceTcpBacklogDropCount = 0L;
+    private int voiceTcpBacklogPeakDepth = 0;
     private final Object voiceTcpInboundWorkerLock = new Object();
     private Thread voiceTcpInboundWorkerThread;
     private volatile boolean voiceTcpInboundWorkerRunning = false;
     private final Object voiceTcpInboundQueueLock = new Object();
     private final ArrayDeque<QueuedTcpVoicePacket> voiceTcpInboundQueue = new ArrayDeque<QueuedTcpVoicePacket>();
-    private boolean firstTcpVoiceLogged = false;
     
     // MCOSE version checking
     private boolean receivedVersionPacket = false;
@@ -109,7 +126,6 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private final String msgPlayerLeave;
     private static final long INVENTORY_SHORTCUT_PRIME_MS = 350L;
     private int primedInventorySlot = -1;
-    private String lastSentListName;
     private int primedInventoryWindowId = -1;
     private long primedInventoryClickAt = 0L;
 
@@ -123,6 +139,175 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
     public boolean supportsChunkZstd() {
         return (this.negotiatedModFeatures & ModProtocol.FEATURE_CHUNK_ZSTD) != 0;
+    }
+
+    public boolean supportsItemStackV2() {
+        return (this.negotiatedModFeatures & ModProtocol.FEATURE_ITEM_STACK_V2) != 0;
+    }
+
+    public boolean supportsItemComponents() {
+        return (this.negotiatedModFeatures & ModProtocol.FEATURE_ITEM_COMPONENTS) != 0;
+    }
+
+    public boolean supportsRegionCoreItems() {
+        return (this.negotiatedModFeatures & ModProtocol.FEATURE_REGIONCORE_ITEMS) != 0;
+    }
+
+    public boolean supportsEntityWireV2() {
+        return (this.negotiatedModFeatures & ModProtocol.FEATURE_ENTITY_WIRE_V2) != 0;
+    }
+
+    public boolean supportsEntityDataV2() {
+        return (this.negotiatedModFeatures & ModProtocol.FEATURE_ENTITY_DATA_V2) != 0;
+    }
+
+    public boolean supportsSkinPartSync() {
+        return this.modProtocolNegotiated
+            && (this.negotiatedModFeatures & ModProtocol.FEATURE_SKIN_PARTS_SYNC) != 0;
+    }
+
+    public static long getParallelVoiceConsumedTotal() {
+        return PARALLEL_VOICE_CONSUMED_TOTAL.get();
+    }
+
+    public static long getParallelVoiceDroppedRateTotal() {
+        return PARALLEL_VOICE_DROPPED_RATE_TOTAL.get();
+    }
+
+    public static long getParallelVoiceDroppedInvalidTotal() {
+        return PARALLEL_VOICE_DROPPED_INVALID_TOTAL.get();
+    }
+
+    public static long getParallelVoiceDroppedOverflowTotal() {
+        return PARALLEL_VOICE_DROPPED_OVERFLOW_TOTAL.get();
+    }
+
+    public static long getParallelVoiceQueueWaitNanosTotal() {
+        return PARALLEL_VOICE_QUEUE_WAIT_NANOS_TOTAL.get();
+    }
+
+    public static long getParallelVoiceQueueWaitSamplesTotal() {
+        return PARALLEL_VOICE_QUEUE_WAIT_SAMPLES_TOTAL.get();
+    }
+
+    public static long consumeParallelVoiceQueueWaitMaxNanos() {
+        return PARALLEL_VOICE_QUEUE_WAIT_MAX_NANOS_SINCE_POLL.getAndSet(0L);
+    }
+
+    public static VoiceTcpWindowStats consumeVoiceTcpWindowStats() {
+        return new VoiceTcpWindowStats(
+            VOICE_TCP_ATTEMPTS_WINDOW.getAndSet(0L),
+            VOICE_TCP_QUEUE_OVERFLOW_WINDOW.getAndSet(0L),
+            consumeVoiceTcpQueueWaitP95Ms(),
+            consumeVoiceTcpDropReasonsWindow()
+        );
+    }
+
+    private static Map<String, Long> consumeVoiceTcpDropReasonsWindow() {
+        Map<String, Long> snapshot = new HashMap<String, Long>();
+        for (Map.Entry<String, AtomicLong> entry : VOICE_TCP_DROP_REASONS_WINDOW.entrySet()) {
+            AtomicLong counter = entry.getValue();
+            if (counter == null) {
+                continue;
+            }
+            long count = counter.getAndSet(0L);
+            if (count > 0L) {
+                snapshot.put(entry.getKey(), Long.valueOf(count));
+            }
+        }
+        return snapshot;
+    }
+
+    private static double consumeVoiceTcpQueueWaitP95Ms() {
+        long totalSamples = 0L;
+        long[] bucketCounts = new long[VOICE_TCP_QUEUE_WAIT_BUCKET_MS.length + 1];
+        for (int i = 0; i < bucketCounts.length; ++i) {
+            long count = VOICE_TCP_QUEUE_WAIT_BUCKETS_WINDOW.getAndSet(i, 0L);
+            bucketCounts[i] = count;
+            totalSamples += count;
+        }
+        if (totalSamples <= 0L) {
+            return 0.0D;
+        }
+        long threshold = (long) Math.ceil((double) totalSamples * 0.95D);
+        long cumulative = 0L;
+        for (int i = 0; i < bucketCounts.length; ++i) {
+            cumulative += bucketCounts[i];
+            if (cumulative >= threshold) {
+                if (i >= VOICE_TCP_QUEUE_WAIT_BUCKET_MS.length) {
+                    return (double) VOICE_TCP_QUEUE_WAIT_BUCKET_MS[VOICE_TCP_QUEUE_WAIT_BUCKET_MS.length - 1];
+                }
+                return (double) VOICE_TCP_QUEUE_WAIT_BUCKET_MS[i];
+            }
+        }
+        return (double) VOICE_TCP_QUEUE_WAIT_BUCKET_MS[VOICE_TCP_QUEUE_WAIT_BUCKET_MS.length - 1];
+    }
+
+    private static void recordVoiceTcpDropReason(String reason) {
+        String normalizedReason = normalizeVoiceDropReason(reason);
+        AtomicLong counter = VOICE_TCP_DROP_REASONS_WINDOW.get(normalizedReason);
+        if (counter == null) {
+            AtomicLong created = new AtomicLong();
+            AtomicLong existing = VOICE_TCP_DROP_REASONS_WINDOW.putIfAbsent(normalizedReason, created);
+            counter = existing != null ? existing : created;
+        }
+        counter.incrementAndGet();
+    }
+
+    private static String normalizeVoiceDropReason(String reason) {
+        if (reason == null) {
+            return "unknown";
+        }
+        String trimmed = reason.trim();
+        if (trimmed.length() == 0) {
+            return "unknown";
+        }
+        int end = trimmed.length();
+        int colon = trimmed.indexOf(':');
+        if (colon >= 0 && colon < end) {
+            end = colon;
+        }
+        int space = trimmed.indexOf(' ');
+        if (space >= 0 && space < end) {
+            end = space;
+        }
+        return trimmed.substring(0, end);
+    }
+
+    private static void recordVoiceTcpQueueWaitSample(long queueWaitNanos) {
+        long queueWaitMs = queueWaitNanos <= 0L ? 0L : queueWaitNanos / 1_000_000L;
+        int bucket = VOICE_TCP_QUEUE_WAIT_BUCKET_MS.length;
+        for (int i = 0; i < VOICE_TCP_QUEUE_WAIT_BUCKET_MS.length; ++i) {
+            if (queueWaitMs <= VOICE_TCP_QUEUE_WAIT_BUCKET_MS[i]) {
+                bucket = i;
+                break;
+            }
+        }
+        VOICE_TCP_QUEUE_WAIT_BUCKETS_WINDOW.incrementAndGet(bucket);
+    }
+
+    public static final class VoiceTcpWindowStats {
+        public final long attempts;
+        public final long queueOverflowDrops;
+        public final double queueWaitP95Ms;
+        public final Map<String, Long> dropReasons;
+
+        private VoiceTcpWindowStats(long attempts, long queueOverflowDrops, double queueWaitP95Ms, Map<String, Long> dropReasons) {
+            this.attempts = attempts;
+            this.queueOverflowDrops = queueOverflowDrops;
+            this.queueWaitP95Ms = queueWaitP95Ms;
+            this.dropReasons = dropReasons == null ? Collections.<String, Long>emptyMap() : dropReasons;
+        }
+
+        public long getTotalDrops() {
+            long total = 0L;
+            for (Long value : this.dropReasons.values()) {
+                if (value != null) {
+                    total += value.longValue();
+                }
+            }
+            return total;
+        }
     }
 
     // markLoginPacketSent no-op (kept for compatibility)
@@ -173,6 +358,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private int lastDropTick = MinecraftServer.currentTick;
     private int dropCount = 0;
     private static final int PLACE_DISTANCE_SQUARED = 6 * 6;
+    private static final long RIGHT_CLICK_DUPLICATE_SUPPRESS_MS = 35L;
 
     // Get position of last block hit for BlockDamageLevel.STOPPED
     private double lastPosX = Double.MAX_VALUE;
@@ -208,21 +394,14 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.sendPacket(new Packet0KeepAlive());
         }
 
-        // Periodically push updated player list to all clients for Tab overlay
+        // Periodically push updated ping to all clients for Tab overlay
         try {
             if ((MinecraftServer.currentTick - this.lastTick) >= 20) { // about once per second
                 this.lastTick = MinecraftServer.currentTick;
+                int currentPing = this.b();
                 if (this.player != null) {
-                    String displayName = this.player.listName != null ? this.player.listName : this.player.name;
-                    
-                    // If the name changed, remove the old one from the tab list
-                    if (this.lastSentListName != null && !this.lastSentListName.equals(displayName)) {
-                        this.minecraftServer.serverConfigurationManager.sendAll(new Packet201PlayerInfo(this.lastSentListName, false, 0));
-                    }
-                    
-                    Packet201PlayerInfo update = new Packet201PlayerInfo(displayName, true, 0);
+                    Packet201PlayerInfo update = new Packet201PlayerInfo(this.player.name, true, currentPing);
                     this.minecraftServer.serverConfigurationManager.sendAll(update);
-                    this.lastSentListName = displayName;
                 }
             }
         } catch (Throwable ignore) {}
@@ -620,16 +799,6 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.player.onGround = packet10flying.g;
             this.minecraftServer.serverConfigurationManager.d(this.player);
             this.player.b(this.player.locY - d0, packet10flying.g);
-
-            // MCOSE - modern crops aggressive resync
-            if (!this.player.dead && UberbukkitConfig.getInstance().getBoolean("mechanics.modern_farmland", true)) {
-                int px = MathHelper.floor(this.player.locX);
-                int py = MathHelper.floor(this.player.locY - 0.1D);
-                int pz = MathHelper.floor(this.player.locZ);
-                if (this.player.world.getTypeId(px, py, pz) == Block.SOIL.id) {
-                    this.sendPacket(new Packet53BlockChange(px, py, pz, this.player.world));
-                }
-            }
         }
     }
 
@@ -719,24 +888,107 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         //this.player.F();
     }
 
+    public boolean tryHandleParallelChat(Packet3Chat packet3chat) {
+        if (!PARALLEL_CHAT_ENABLED) {
+            return false;
+        }
+
+        try {
+            if (packet3chat == null || packet3chat.message == null) {
+                return PARALLEL_FAIL_OPEN_TO_LEGACY ? false : true;
+            }
+
+            String s = packet3chat.message;
+            if (s.length() > Packet3Chat.MAX_CHAT_LENGTH) {
+                this.disconnect("Chat message too long");
+                return true;
+            }
+
+            s = s.trim();
+            if (s.length() == 0) {
+                return true;
+            }
+
+            for (int i = 0; i < s.length(); ++i) {
+                if (!FontAllowedCharacters.isAllowedCharacter(s.charAt(i))) {
+                    this.disconnect("Illegal characters in chat");
+                    return true;
+                }
+            }
+
+            if (s.startsWith("/")) {
+                return false;
+            }
+
+            if (this.player == null || this.player.dead || this.disconnected) {
+                return true;
+            }
+
+            if (uk.betacraft.uberbukkit.AdminRegistry.isMuted(this.player.name)) {
+                this.networkManager.queue(new Packet3Chat("\u00A7cYou are muted."));
+                return true;
+            }
+
+            if (isParallelChatRateLimited(System.currentTimeMillis())) {
+                CommunicationDispatcher dispatcher = this.minecraftServer != null ? this.minecraftServer.getCommunicationDispatcher() : null;
+                if (dispatcher != null) {
+                    dispatcher.recordParallelChatRateDrop();
+                }
+                this.networkManager.queue(new Packet3Chat("\u00A7cYou are sending messages too quickly."));
+                return true;
+            }
+
+            CommunicationDispatcher dispatcher = this.minecraftServer != null ? this.minecraftServer.getCommunicationDispatcher() : null;
+            if (dispatcher == null || !dispatcher.isRunning()) {
+                return PARALLEL_FAIL_OPEN_TO_LEGACY ? false : true;
+            }
+
+            if (!dispatcher.enqueueRawChat(this.player, s)) {
+                return PARALLEL_FAIL_OPEN_TO_LEGACY ? false : true;
+            }
+
+            return true;
+        } catch (Throwable t) {
+            String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
+            a.warning("[CommunicationDispatcher] Parallel chat failure player=" + playerName + ", reason=" + t.getMessage());
+            return PARALLEL_FAIL_OPEN_TO_LEGACY ? false : true;
+        }
+    }
+
+    public boolean tryHandleParallelVoice(Packet64Voice packet64voice) {
+        if (!PARALLEL_VOICE_TCP_ENABLED) {
+            return false;
+        }
+        try {
+            return processVoicePacket(packet64voice, true);
+        } catch (Throwable t) {
+            recordVoiceTcpDropReason("parallel-failure");
+            return PARALLEL_FAIL_OPEN_TO_LEGACY ? false : true;
+        }
+    }
+
     public void handle64Voice(Packet64Voice packet64voice) {
+        processVoicePacket(packet64voice, false);
+    }
+
+    private boolean processVoicePacket(Packet64Voice packet64voice, boolean parallelLane) {
         long now = System.currentTimeMillis();
         int payloadLength = packet64voice != null && packet64voice.audioData != null ? packet64voice.audioData.length : -1;
 
         if (!this.minecraftServer.isVoiceChatEnabled()) {
             logVoiceTcpDrop(now, payloadLength, "voice-chat-disabled");
-            return;
-        }
-
-        if (!this.firstTcpVoiceLogged) {
-            this.firstTcpVoiceLogged = true;
-            String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
-            a.info("[VoiceChat] Player " + playerName + " using TCP voice transport");
+            if (parallelLane) {
+                PARALLEL_VOICE_DROPPED_INVALID_TOTAL.incrementAndGet();
+            }
+            return true;
         }
 
         if (packet64voice == null || packet64voice.audioData == null) {
             logVoiceTcpDrop(now, payloadLength, "empty-payload");
-            return;
+            if (parallelLane) {
+                PARALLEL_VOICE_DROPPED_INVALID_TOTAL.incrementAndGet();
+            }
+            return true;
         }
 
         boolean stopMarker = packet64voice.audioData.length == 0;
@@ -744,27 +996,42 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         if (packet64voice.audioData.length > Packet64Voice.MAX_PAYLOAD_SIZE) {
             logVoiceTcpDrop(now, packet64voice.audioData.length, "payload-too-large");
             this.disconnect("Invalid voice payload");
-            return;
+            if (parallelLane) {
+                PARALLEL_VOICE_DROPPED_INVALID_TOTAL.incrementAndGet();
+            }
+            return true;
         }
 
         if (this.player == null || this.player.dead) {
             logVoiceTcpDrop(now, packet64voice.audioData.length, "player-missing-or-dead");
-            return;
+            if (parallelLane) {
+                PARALLEL_VOICE_DROPPED_INVALID_TOTAL.incrementAndGet();
+            }
+            return true;
         }
 
         if (!stopMarker && isTcpVoiceRateLimited(now, packet64voice.audioData.length)) {
             logVoiceTcpDrop(now, packet64voice.audioData.length, "rate-limited");
-            return;
+            if (parallelLane) {
+                PARALLEL_VOICE_DROPPED_RATE_TOTAL.incrementAndGet();
+            }
+            return true;
         }
 
 		if(uk.betacraft.uberbukkit.AdminRegistry.isMuted(this.player.name)) {
             logVoiceTcpDrop(now, packet64voice.audioData.length, "player-muted");
-			return;
+            if (parallelLane) {
+                PARALLEL_VOICE_DROPPED_INVALID_TOTAL.incrementAndGet();
+            }
+			return true;
 		}
 
 		if(!this.canUseVoiceChat()) {
             logVoiceTcpDrop(now, packet64voice.audioData.length, "permission-denied");
-			return;
+            if (parallelLane) {
+                PARALLEL_VOICE_DROPPED_INVALID_TOTAL.incrementAndGet();
+            }
+			return true;
 		}
 
         boolean routeToRoom = this.minecraftServer.chatRoomManager.shouldRouteVoiceToRoom(this.player);
@@ -778,84 +1045,122 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             outbound = packet64voice.cloneForForwarding(this.player.id, (float) this.minecraftServer.getVoiceChatBroadcastRadius(), this.player.name);
         }
 
-        if (!enqueueTcpVoiceInbound(now, packet64voice.audioData.length, outbound, routeToRoom)) {
+        if (!enqueueTcpVoiceInbound(now, packet64voice.audioData.length, outbound, routeToRoom, parallelLane)) {
             logVoiceTcpDrop(now, packet64voice.audioData.length, "queue-overflow");
+            if (parallelLane) {
+                PARALLEL_VOICE_DROPPED_OVERFLOW_TOTAL.incrementAndGet();
+            }
+            return true;
         }
+
+        if (parallelLane) {
+            PARALLEL_VOICE_CONSUMED_TOTAL.incrementAndGet();
+        }
+
+        return true;
+    }
+
+    private boolean isParallelChatRateLimited(long now) {
+        if (this.parallelChatWindowStartAt == 0L || now - this.parallelChatWindowStartAt >= PARALLEL_CHAT_RATE_WINDOW_MS) {
+            this.parallelChatWindowStartAt = now;
+            this.parallelChatMessagesInWindow = 0;
+        }
+
+        if (this.parallelChatMessagesInWindow >= PARALLEL_CHAT_MAX_MESSAGES_PER_WINDOW) {
+            return true;
+        }
+
+        this.parallelChatMessagesInWindow++;
+        return false;
     }
 
     private void logVoiceTcpAttempt(long now, int payloadLength, String route) {
-        if (now - this.lastVoiceTcpAttemptLogAt < VOICE_TCP_ATTEMPT_LOG_INTERVAL_MS) {
-            return;
-        }
-        this.lastVoiceTcpAttemptLogAt = now;
-        String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
-        a.info(
-            "[VoiceChat][ServerTcpRx] Voice transmit attempt player=" + playerName +
-            ", bytes=" + payloadLength +
-            ", route=" + route
-        );
+        VOICE_TCP_ATTEMPTS_WINDOW.incrementAndGet();
     }
 
     private void logVoiceTcpDrop(long now, int payloadLength, String reason) {
-        if (now - this.lastVoiceTcpDropLogAt < VOICE_TCP_DROP_LOG_INTERVAL_MS) {
-            return;
-        }
-        this.lastVoiceTcpDropLogAt = now;
-        String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
-        a.info(
-            "[VoiceChat][ServerTcpRx] Dropped voice transmit from " + playerName +
-            ", reason=" + reason +
-            ", bytes=" + payloadLength
-        );
+        recordVoiceTcpDropReason(reason);
     }
 
     private boolean isTcpVoiceRateLimited(long now, int payloadLength) {
-        if (this.voiceTcpWindowStartAt == 0L || now - this.voiceTcpWindowStartAt >= VOICE_TCP_RATE_WINDOW_MS) {
-            this.voiceTcpWindowStartAt = now;
-            this.voiceTcpPacketsInWindow = 0;
-            this.voiceTcpBytesInWindow = 0;
-        }
-
         int safePayloadLength = payloadLength;
         if (safePayloadLength < 0) {
             safePayloadLength = 0;
         }
 
-        if (this.voiceTcpPacketsInWindow >= VOICE_TCP_MAX_PACKETS_PER_WINDOW) {
+        int packetsPerSecond = this.minecraftServer != null ? Math.max(1, this.minecraftServer.getVoiceRateMaxPacketsPerSec()) : 120;
+        int bytesPerSecond = this.minecraftServer != null ? Math.max(1, this.minecraftServer.getVoiceRateMaxBytesPerSec()) : 131072;
+        int burstSeconds = this.minecraftServer != null ? Math.max(1, this.minecraftServer.getVoiceRateBurstSeconds()) : 2;
+        double packetCapacity = Math.max(1.0D, (double) packetsPerSecond * (double) burstSeconds);
+        double byteCapacity = Math.max(1.0D, (double) bytesPerSecond * (double) burstSeconds);
+
+        if (this.voiceTcpLimiterLastRefillAt <= 0L || now < this.voiceTcpLimiterLastRefillAt) {
+            this.voiceTcpPacketTokens = packetCapacity;
+            this.voiceTcpByteTokens = byteCapacity;
+            this.voiceTcpLimiterLastRefillAt = now;
+        } else {
+            long elapsedMs = now - this.voiceTcpLimiterLastRefillAt;
+            if (elapsedMs > 0L) {
+                double elapsedSeconds = elapsedMs / 1000.0D;
+                this.voiceTcpPacketTokens = Math.min(packetCapacity, this.voiceTcpPacketTokens + elapsedSeconds * (double) packetsPerSecond);
+                this.voiceTcpByteTokens = Math.min(byteCapacity, this.voiceTcpByteTokens + elapsedSeconds * (double) bytesPerSecond);
+                this.voiceTcpLimiterLastRefillAt = now;
+            }
+        }
+
+        if (this.voiceTcpPacketTokens < 1.0D) {
             return true;
         }
-        if (this.voiceTcpBytesInWindow + safePayloadLength > VOICE_TCP_MAX_BYTES_PER_WINDOW) {
+        if (this.voiceTcpByteTokens < (double) safePayloadLength) {
             return true;
         }
 
-        this.voiceTcpPacketsInWindow++;
-        this.voiceTcpBytesInWindow += safePayloadLength;
+        this.voiceTcpPacketTokens -= 1.0D;
+        this.voiceTcpByteTokens -= (double) safePayloadLength;
         return false;
     }
 
-    private boolean enqueueTcpVoiceInbound(long now, int payloadLength, Packet64Voice outbound, boolean routeToRoom) {
+    private boolean enqueueTcpVoiceInbound(long now, int payloadLength, Packet64Voice outbound, boolean routeToRoom, boolean parallelLane) {
         if (outbound == null) {
             return false;
         }
         startVoiceTcpInboundWorker();
         synchronized (this.voiceTcpInboundQueueLock) {
             if (this.voiceTcpInboundQueue.size() >= VOICE_TCP_INBOUND_QUEUE_MAX_PACKETS) {
+                recordVoiceTcpBacklogState(now, this.voiceTcpInboundQueue.size(), true);
                 this.voiceTcpInboundQueue.pollFirst();
-                if (now - this.lastVoiceTcpQueueDropLogAt >= VOICE_TCP_QUEUE_DROP_LOG_INTERVAL_MS) {
-                    this.lastVoiceTcpQueueDropLogAt = now;
-                    String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
-                    a.info(
-                        "[VoiceChat][ServerTcpRx] Dropped oldest queued voice packet for " + playerName +
-                        ", reason=queue-overflow, bytes=" + payloadLength +
-                        ", maxPackets=" + VOICE_TCP_INBOUND_QUEUE_MAX_PACKETS
-                    );
-                }
+                VOICE_TCP_QUEUE_OVERFLOW_WINDOW.incrementAndGet();
                 return false;
             }
-            this.voiceTcpInboundQueue.offerLast(new QueuedTcpVoicePacket(outbound, routeToRoom));
+            this.voiceTcpInboundQueue.offerLast(new QueuedTcpVoicePacket(outbound, routeToRoom, parallelLane, System.nanoTime()));
+            recordVoiceTcpBacklogState(now, this.voiceTcpInboundQueue.size(), false);
             this.voiceTcpInboundQueueLock.notifyAll();
             return true;
         }
+    }
+
+    private void recordVoiceTcpBacklogState(long now, int queueDepth, boolean droppedForOverflow) {
+        if (queueDepth > this.voiceTcpBacklogPeakDepth) {
+            this.voiceTcpBacklogPeakDepth = queueDepth;
+        }
+        if (droppedForOverflow) {
+            this.voiceTcpBacklogDropCount++;
+        }
+        if (now - this.lastVoiceTcpBacklogLogAt < VOICE_TCP_BACKLOG_LOG_INTERVAL_MS) {
+            return;
+        }
+
+        if (this.voiceTcpBacklogDropCount <= 0L && this.voiceTcpBacklogPeakDepth < VOICE_TCP_BACKLOG_WARN_QUEUE_DEPTH) {
+            return;
+        }
+
+        String playerName = this.player != null && this.player.name != null ? this.player.name : "<unknown>";
+        a.warning("[VoiceChat][ServerTcpRx] Voice transmissions backed up player=" + playerName
+            + ", queueDepthPeak=" + this.voiceTcpBacklogPeakDepth + "/" + VOICE_TCP_INBOUND_QUEUE_MAX_PACKETS
+            + ", dropped=" + this.voiceTcpBacklogDropCount);
+        this.lastVoiceTcpBacklogLogAt = now;
+        this.voiceTcpBacklogDropCount = 0L;
+        this.voiceTcpBacklogPeakDepth = 0;
     }
 
     private void startVoiceTcpInboundWorker() {
@@ -922,7 +1227,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             } catch (InterruptedException ignored) {
                 break;
             } catch (Throwable t) {
-                a.warning("[VoiceChat][ServerTcpRx] Worker error: " + t.getMessage());
+                recordVoiceTcpDropReason("worker-error");
             }
         }
     }
@@ -930,6 +1235,13 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private void processQueuedTcpVoicePacket(QueuedTcpVoicePacket queued) {
         if (queued == null || queued.packet == null || this.disconnected || this.player == null) {
             return;
+        }
+        long queueWaitNanos = Math.max(0L, System.nanoTime() - queued.enqueueNanos);
+        recordVoiceTcpQueueWaitSample(queueWaitNanos);
+        if (queued.parallelLane) {
+            PARALLEL_VOICE_QUEUE_WAIT_NANOS_TOTAL.addAndGet(queueWaitNanos);
+            PARALLEL_VOICE_QUEUE_WAIT_SAMPLES_TOTAL.incrementAndGet();
+            updateAtomicMax(PARALLEL_VOICE_QUEUE_WAIT_MAX_NANOS_SINCE_POLL, queueWaitNanos);
         }
         if (!this.minecraftServer.isVoiceChatEnabled()) {
             return;
@@ -947,6 +1259,16 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.player.dimension,
             queued.packet
         );
+    }
+
+    private static void updateAtomicMax(AtomicLong target, long candidate) {
+        long prev;
+        do {
+            prev = target.get();
+            if (candidate <= prev) {
+                return;
+            }
+        } while (!target.compareAndSet(prev, candidate));
     }
 
 	private boolean canUseVoiceChat() {
@@ -1243,7 +1565,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         //  -- Grum
 
         if (packet15place.face == 255) {
-            if (packet15place.itemstack != null && packet15place.itemstack.id == this.lastMaterial && this.lastPacket != null && packet15place.timestamp - this.lastPacket < 100) {
+            if (packet15place.itemstack != null && packet15place.itemstack.id == this.lastMaterial && this.lastPacket != null && packet15place.timestamp - this.lastPacket < RIGHT_CLICK_DUPLICATE_SUPPRESS_MS) {
                 this.lastPacket = null;
                 return;
             }
@@ -1412,6 +1734,13 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
         packet = packetSentEvent.getPacket();
 
+        if (this.supportsEntityWireV2()) {
+            packet = this.translateEntityPacketToV2(packet);
+            if (packet == null) {
+                return;
+            }
+        }
+
         Protocol protocol = this.player.protocol;
         boolean supportsPacket = protocol.canReceivePacket(packet.b());
         if (!supportsPacket && packet instanceof Packet62Sound && this.isMcoseClient()) {
@@ -1558,6 +1887,34 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
     }
 
+    private Packet translateEntityPacketToV2(Packet packet) {
+        if (packet == null) {
+            return null;
+        }
+        if (packet instanceof Packet24MobSpawn) {
+            return new Packet204AddEntityV2((Packet24MobSpawn)packet);
+        }
+        if (packet instanceof Packet40EntityMetadata) {
+            return new Packet205SetEntityDataV2((Packet40EntityMetadata)packet);
+        }
+        if (packet instanceof Packet34EntityTeleport) {
+            return Packet206EntityMoveV2.fromTeleport((Packet34EntityTeleport)packet);
+        }
+        if (packet instanceof Packet30Entity) {
+            return Packet206EntityMoveV2.fromLegacy((Packet30Entity)packet);
+        }
+        if (packet instanceof Packet39AttachEntity) {
+            return new Packet207EntityLinkV2((Packet39AttachEntity)packet);
+        }
+        if (packet instanceof Packet5EntityEquipment) {
+            Packet5EntityEquipment legacy = (Packet5EntityEquipment)packet;
+            if (legacy.items == null) {
+                return new Packet208EntityEquipmentV2(legacy);
+            }
+        }
+        return packet;
+    }
+
     public void a(Packet3Chat packet3chat) {
         // poseidon
         PacketReceivedEvent event = new PacketReceivedEvent(server.getPlayer(player), packet3chat);
@@ -1572,7 +1929,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             s = s.trim();
 
             for (int i = 0; i < s.length(); ++i) {
-                if (FontAllowedCharacters.allowedCharacters.indexOf(s.charAt(i)) < 0) {
+                if (!FontAllowedCharacters.isAllowedCharacter(s.charAt(i))) {
                     this.disconnect("Illegal characters in chat");
                     return;
                 }
@@ -1798,17 +2155,17 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         // Allow from true creative OR trusted modded clients (pvn >= 12) for pick-block support
         boolean allow = (this.player.gameMode == 1) || (this.networkManager != null && this.networkManager.pvn >= 12);
         if (!allow) return;
+        ItemStack stack = sanitizeCreativeStack(packet.itemStack);
         if (packet.slot == -1) {
-            if (packet.itemStack != null) {
-                int max = Math.min(64, packet.itemStack.getMaxStackSize());
-                if (packet.itemStack.count < 1) packet.itemStack.count = 1;
-                if (packet.itemStack.count > max) packet.itemStack.count = max;
-                this.player.a(packet.itemStack, true);
+            if (stack != null) {
+                int max = Math.min(64, stack.getMaxStackSize());
+                if (stack.count < 1) stack.count = 1;
+                if (stack.count > max) stack.count = max;
+                this.player.a(stack, true);
             }
             return;
         }
         int slot = packet.slot;
-        ItemStack stack = packet.itemStack;
         if (stack != null) {
             int max = Math.min(64, stack.getMaxStackSize());
             if (stack.count < 1) stack.count = 1;
@@ -1823,6 +2180,26 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         }
         ItemStack confirm = (slot >= 36 && slot < 45) ? this.player.inventory.items[slot - 36] : this.player.inventory.items[slot];
         this.player.netServerHandler.sendPacket(new Packet103SetSlot(0, slot, confirm));
+    }
+
+    private ItemStack sanitizeCreativeStack(ItemStack stack) {
+        if (stack == null) {
+            return null;
+        }
+
+        if (stack.getItem() != null) {
+            return stack;
+        }
+
+        // Compatibility shim: legacy clients/palettes may still send fence gate as 150.
+        if (stack.id == 150 && Block.FENCE_GATE != null && Item.byId[Block.FENCE_GATE.id] != null) {
+            stack.id = Block.FENCE_GATE.id;
+            if (stack.getItem() != null) {
+                return stack;
+            }
+        }
+
+        return null;
     }
 
     public void a(Packet0KeepAlive packet0KeepAlive) {
@@ -2198,7 +2575,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                             // This is a color code character following § - allowed
                             continue;
                         }
-                        if (FontAllowedCharacters.allowedCharacters.indexOf(c) < 0) {
+                        if (!FontAllowedCharacters.isAllowedCharacter(c)) {
                             flag = false;
                         }
                     }
@@ -2295,18 +2672,27 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             this.negotiatedModFeatures = 0;
             this.modProtocolNegotiated = false;
 
-            if (helloInfo.version == ModProtocol.PROTOCOL_VERSION) {
+            if (ModProtocol.isSupportedVersion(helloInfo.version)) {
                 this.modProtocolNegotiated = true;
+                if (!ModProtocol.supportsFeatureBits(helloInfo.version)) {
+                    this.disconnect("Protocol mismatch: modern entity wire (v2) is required.");
+                    return;
+                }
+
+                if (!ModProtocol.hasRequiredEntityFeatures(helloInfo.featureBits)) {
+                    this.disconnect("Protocol mismatch: modern entity wire (v2) is required.");
+                    return;
+                }
+
                 int serverFeatures = ModProtocol.resolveServerSupportedFeatures();
                 this.negotiatedModFeatures = helloInfo.featureBits & serverFeatures;
+                int ackVersion = helloInfo.version == ModProtocol.PROTOCOL_VERSION_EXPERIMENTAL
+                        ? ModProtocol.PROTOCOL_VERSION_EXPERIMENTAL
+                        : ModProtocol.PROTOCOL_VERSION;
                 this.sendPacket(new Packet250CustomPayload(
                         ModProtocol.CHANNEL_HELLO_ACK,
-                        ModProtocol.createHelloAckPayload(ModProtocol.PROTOCOL_VERSION, this.negotiatedModFeatures)));
-            } else if (helloInfo.version == ModProtocol.PROTOCOL_VERSION_LEGACY) {
-                this.modProtocolNegotiated = true;
-                this.sendPacket(new Packet250CustomPayload(
-                        ModProtocol.CHANNEL_HELLO_ACK,
-                        ModProtocol.createHelloAckPayload(ModProtocol.PROTOCOL_VERSION_LEGACY, 0)));
+                        ModProtocol.createHelloAckPayload(ackVersion, this.negotiatedModFeatures)));
+                this.sendSkinPartSnapshotToClient();
             }
             return;
         }
@@ -2321,6 +2707,11 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             }
             this.syncedRegistrySnapshot = RegistrySyncSnapshot.captureLocal();
             this.sendPacket(new Packet250CustomPayload(ModProtocol.CHANNEL_REGISTRY_SYNC, ModProtocol.createRegistrySyncPayload(this.syncedRegistrySnapshot)));
+            return;
+        }
+
+        if (ModProtocol.CHANNEL_SKIN_PARTS.equals(packet250custompayload.channel)) {
+            this.handleSkinPartsPacket(packet250custompayload);
             return;
         }
 
@@ -2355,6 +2746,57 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         
         // Handle other custom channels here if needed
         // (Voice chat, Herobrine events, etc. are handled by their own systems)
+    }
+
+    private void handleSkinPartsPacket(Packet250CustomPayload packet) {
+        if (!this.supportsSkinPartSync()) {
+            return;
+        }
+        if (this.player == null) {
+            return;
+        }
+
+        ModProtocol.SkinPartsInfo skinPartsInfo = ModProtocol.readSkinPartsPayload(packet == null ? null : packet.data);
+        int modelPartMask = skinPartsInfo.modelPartMask & 0x7F;
+        this.player.setSkinModelPartMask(modelPartMask);
+        this.broadcastSkinPartMask(this.player.name, modelPartMask);
+    }
+
+    private void sendSkinPartSnapshotToClient() {
+        if (!this.supportsSkinPartSync()) {
+            return;
+        }
+        if (this.minecraftServer == null || this.minecraftServer.serverConfigurationManager == null) {
+            return;
+        }
+
+        java.util.List<EntityPlayer> online = this.minecraftServer.serverConfigurationManager.getOnlinePlayersSnapshot();
+        for (int i = 0; i < online.size(); ++i) {
+            EntityPlayer onlinePlayer = online.get(i);
+            if (onlinePlayer == null) {
+                continue;
+            }
+            this.sendPacket(new Packet250CustomPayload(
+                    ModProtocol.CHANNEL_SKIN_PARTS,
+                    ModProtocol.createSkinPartsPayload(onlinePlayer.name, onlinePlayer.getSkinModelPartMask())));
+        }
+    }
+
+    private void broadcastSkinPartMask(String username, int modelPartMask) {
+        if (this.minecraftServer == null || this.minecraftServer.serverConfigurationManager == null) {
+            return;
+        }
+
+        java.util.List<EntityPlayer> online = this.minecraftServer.serverConfigurationManager.getOnlinePlayersSnapshot();
+        for (int i = 0; i < online.size(); ++i) {
+            EntityPlayer recipient = online.get(i);
+            if (recipient == null || recipient.netServerHandler == null || !recipient.netServerHandler.supportsSkinPartSync()) {
+                continue;
+            }
+            recipient.netServerHandler.sendPacket(new Packet250CustomPayload(
+                    ModProtocol.CHANNEL_SKIN_PARTS,
+                    ModProtocol.createSkinPartsPayload(username, modelPartMask)));
+        }
     }
     
     /**
@@ -2720,10 +3162,14 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     private static final class QueuedTcpVoicePacket {
         private final Packet64Voice packet;
         private final boolean routeToRoom;
+        private final boolean parallelLane;
+        private final long enqueueNanos;
 
-        private QueuedTcpVoicePacket(Packet64Voice packet, boolean routeToRoom) {
+        private QueuedTcpVoicePacket(Packet64Voice packet, boolean routeToRoom, boolean parallelLane, long enqueueNanos) {
             this.packet = packet;
             this.routeToRoom = routeToRoom;
+            this.parallelLane = parallelLane;
+            this.enqueueNanos = enqueueNanos;
         }
     }
 }

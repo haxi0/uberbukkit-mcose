@@ -64,10 +64,10 @@ public class Item {
     public static Item DIAMOND_CHESTPLATE = (new ItemArmor(55, 3, 3, 1)).a(3, 1).a("chestplateDiamond");
     public static Item DIAMOND_LEGGINGS = (new ItemArmor(56, 3, 3, 2)).a(3, 2).a("leggingsDiamond");
     public static Item DIAMOND_BOOTS = (new ItemArmor(57, 3, 3, 3)).a(3, 3).a("bootsDiamond");
-    public static Item GOLD_HELMET = (new ItemArmor(58, 1, 4, 0)).a(4, 0).a("helmetGold");
-    public static Item GOLD_CHESTPLATE = (new ItemArmor(59, 1, 4, 1)).a(4, 1).a("chestplateGold");
-    public static Item GOLD_LEGGINGS = (new ItemArmor(60, 1, 4, 2)).a(4, 2).a("leggingsGold");
-    public static Item GOLD_BOOTS = (new ItemArmor(61, 1, 4, 3)).a(4, 3).a("bootsGold");
+    public static Item GOLD_HELMET = (new ItemArmor(58, 4, 4, 0)).a(4, 0).a("helmetGold");
+    public static Item GOLD_CHESTPLATE = (new ItemArmor(59, 4, 4, 1)).a(4, 1).a("chestplateGold");
+    public static Item GOLD_LEGGINGS = (new ItemArmor(60, 4, 4, 2)).a(4, 2).a("leggingsGold");
+    public static Item GOLD_BOOTS = (new ItemArmor(61, 4, 4, 3)).a(4, 3).a("bootsGold");
     public static Item FLINT = (new Item(62)).a(6, 0).a("flint");
     public static Item PORK = (new ItemFood(63, 3, true)).a(7, 5).a("porkchopRaw");
     public static Item GRILLED_PORK = (new ItemFood(64, 8, true)).a(8, 5).a("porkchopCooked");

@@ -52,7 +52,7 @@ public class BlockRedstoneWire extends Block {
     }
 
     private void a(World world, int i, int j, int k, int l, int i1, int j1) {
-        int k1 = world.getData(i, j, k);
+        int k1 = CriticalBlockStateAccess.getRedstoneWirePower(world, i, j, k);
         int l1 = 0;
 
         this.a = false;
@@ -116,7 +116,7 @@ public class BlockRedstoneWire extends Block {
 
         if (k1 != l1) {
             world.suppressPhysics = true;
-            world.setData(i, j, k, l1);
+            CriticalBlockStateAccess.setMetadata(world, i, j, k, l1, true);
             world.b(i, j, k, i, j, k);
             world.suppressPhysics = false;
 
@@ -148,7 +148,7 @@ public class BlockRedstoneWire extends Block {
                 boolean flag1 = false;
                 int i3 = this.getPower(world, j2, j, k2, -1);
 
-                l1 = world.getData(i, j, k);
+                l1 = CriticalBlockStateAccess.getRedstoneWirePower(world, i, j, k);
                 if (l1 > 0) {
                     --l1;
                 }
@@ -158,7 +158,7 @@ public class BlockRedstoneWire extends Block {
                 }
 
                 i3 = this.getPower(world, j2, l2, k2, -1);
-                l1 = world.getData(i, j, k);
+                l1 = CriticalBlockStateAccess.getRedstoneWirePower(world, i, j, k);
                 if (l1 > 0) {
                     --l1;
                 }
@@ -269,7 +269,7 @@ public class BlockRedstoneWire extends Block {
         if (world.getTypeId(i, j, k) != this.id) {
             return l;
         } else {
-            int i1 = world.getData(i, j, k);
+            int i1 = CriticalBlockStateAccess.getRedstoneWirePower(world, i, j, k);
 
             return i1 > l ? i1 : l;
         }
@@ -277,7 +277,7 @@ public class BlockRedstoneWire extends Block {
 
     public void doPhysics(World world, int i, int j, int k, int l) {
         if (!world.isStatic) {
-            int i1 = world.getData(i, j, k);
+            int i1 = CriticalBlockStateAccess.getRedstoneWirePower(world, i, j, k);
             boolean flag = this.canPlace(world, i, j, k);
 
             if (!flag) {
@@ -302,7 +302,7 @@ public class BlockRedstoneWire extends Block {
     public boolean a(IBlockAccess iblockaccess, int i, int j, int k, int l) {
         if (!this.a) {
             return false;
-        } else if (iblockaccess.getData(i, j, k) == 0) {
+        } else if (CriticalBlockStateAccess.getRedstoneWirePower(iblockaccess, i, j, k) == 0) {
             return false;
         } else if (l == 1) {
             return true;
@@ -346,7 +346,7 @@ public class BlockRedstoneWire extends Block {
         } else if (i1 == 0) {
             return false;
         } else if (i1 == Block.DIODE_OFF.id || i1 == Block.DIODE_ON.id) {
-            int j1 = iblockaccess.getData(i, j, k);
+            int j1 = CriticalBlockStateAccess.getRepeaterMetadata(iblockaccess, i, j, k);
 
             return l == BedBlockTextures.b[j1 & 3];
         } else {

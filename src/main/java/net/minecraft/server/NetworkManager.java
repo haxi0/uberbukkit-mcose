@@ -56,6 +56,8 @@ public class NetworkManager {
     private static final int INBOUND_PRIORITY_BURST_LIMIT = 6;
     private static final int LOW_PRIORITY_COALESCE_SCAN_LIMIT = 320;
     private static final int LOW_PRIORITY_MOVEMENT_HARD_CAP = 420;
+    private static final int OUTBOUND_MAX_PACKETS = 8192;
+    private static final int INBOUND_MAX_PACKETS = 8192;
     private final boolean firePacketEvents;
     private final int movementCoalesceThreshold;
     private final int movementDropHardCap;
@@ -180,6 +182,9 @@ public class NetworkManager {
                     this.highPriorityQueue.add(packet);
                 }
                 this.x += packet.a() + 1;
+                if (this.x > 2097152 || getQueuedPacketCount() > OUTBOUND_MAX_PACKETS) {
+                    this.a("disconnect.overflow", new Object[0]);
+                }
             }
         }
     }
@@ -476,7 +481,22 @@ public class NetworkManager {
                 int i = packet.b();
 
                 aint[i] += packet.a() + 1;
-                this.m.add(packet);
+                boolean consumedByParallelLane = false;
+                if (this.p instanceof NetServerHandler) {
+                    NetServerHandler handler = (NetServerHandler) this.p;
+                    if (packet instanceof Packet3Chat) {
+                        consumedByParallelLane = handler.tryHandleParallelChat((Packet3Chat) packet);
+                    } else if (packet instanceof Packet64Voice) {
+                        consumedByParallelLane = handler.tryHandleParallelVoice((Packet64Voice) packet);
+                    }
+                }
+                if (!consumedByParallelLane) {
+                    this.m.add(packet);
+                }
+                if (this.m.size() > INBOUND_MAX_PACKETS) {
+                    this.a("disconnect.overflow", new Object[0]);
+                    return false;
+                }
                 ServerProfiler.getInstance().recordPacketIngress(i, packet.getClass().getSimpleName(), this.m.size());
                 flag = true;
             } else {
@@ -543,7 +563,7 @@ public class NetworkManager {
             this.w = 0;
         }
 
-        int i = (fast ? 1000 : 100);
+        int i = this.getInboundProcessBudget(fast);
 
         //Poseidon - Packet spam detection
         if (spamDetection) {
@@ -601,6 +621,23 @@ public class NetworkManager {
         if (this.t && this.m.isEmpty()) {
             this.p.a(this.u, this.v);
         }
+    }
+
+    private int getInboundProcessBudget(boolean fast) {
+        int queueSize = this.m.size();
+        if (queueSize >= 2048) {
+            return fast ? 1800 : 600;
+        }
+        if (queueSize >= 1024) {
+            return fast ? 1400 : 450;
+        }
+        if (queueSize >= 512) {
+            return fast ? 1100 : 320;
+        }
+        if (queueSize >= 256) {
+            return fast ? 900 : 220;
+        }
+        return fast ? 1000 : 100;
     }
 
     public SocketAddress getSocketAddress() {

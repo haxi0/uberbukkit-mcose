@@ -36,7 +36,7 @@ public class BlockLeaves extends BlockLeavesBase {
                             int leafZ = k + k1;
                             int i2 = world.getData(i + i1, j + j1, k + k1);
 
-                            if ((i2 & 8) == 0) {
+                            if ((i2 & 8) == 0 && (i2 & 4) == 0) {
                                 Chunk leafChunk = world.getChunkAtWorldCoords(leafX, leafZ);
                                 leafChunk.b(leafX & 15, leafY, leafZ & 15, i2 | 8);
                             }
@@ -54,7 +54,7 @@ public class BlockLeaves extends BlockLeavesBase {
             }
             int l = world.getData(i, j, k);
 
-            if ((l & 8) != 0) {
+            if ((l & 8) != 0 && (l & 4) == 0) {
                 byte b0 = 4;
                 int i1 = b0 + 1;
                 byte b1 = 32;

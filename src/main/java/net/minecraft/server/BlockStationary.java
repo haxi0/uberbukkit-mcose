@@ -22,10 +22,10 @@ public class BlockStationary extends BlockFluids {
     }
 
     private void i(World world, int i, int j, int k) {
-        int l = world.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getFluidMetadata(world, i, j, k);
 
         world.suppressPhysics = true;
-        world.setRawTypeIdAndData(i, j, k, this.id - 1, l);
+        CriticalBlockStateAccess.setLegacyState(world, i, j, k, this.id - 1, l, false);
         world.b(i, j, k, i, j, k);
         world.c(i, j, k, this.id - 1, this.c());
         world.suppressPhysics = false;
@@ -33,6 +33,10 @@ public class BlockStationary extends BlockFluids {
 
     public void a(World world, int i, int j, int k, Random random) {
         if (this.material == Material.LAVA) {
+            if (world.worldData != null && !world.worldData.getDoFireTick()) {
+                return;
+            }
+
             int l = random.nextInt(3);
 
             // CraftBukkit start - prevent lava putting something on fire.

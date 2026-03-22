@@ -122,6 +122,18 @@ public class ServerProfiler {
     private long lastRegionWriteZstdFallbackTotal = 0L;
     private long lastRegionWriteZstdNanosTotal = 0L;
     private long lastRegionWriteZlibNanosTotal = 0L;
+    private long lastParallelChatQueuedTotal = 0L;
+    private long lastParallelChatSentTotal = 0L;
+    private long lastParallelChatDroppedOverflowTotal = 0L;
+    private long lastParallelChatDroppedRateTotal = 0L;
+    private long lastParallelChatQueueWaitNanosTotal = 0L;
+    private long lastParallelChatQueueWaitSamplesTotal = 0L;
+    private long lastParallelVoiceConsumedTotal = 0L;
+    private long lastParallelVoiceDroppedRateTotal = 0L;
+    private long lastParallelVoiceDroppedInvalidTotal = 0L;
+    private long lastParallelVoiceDroppedOverflowTotal = 0L;
+    private long lastParallelVoiceQueueWaitNanosTotal = 0L;
+    private long lastParallelVoiceQueueWaitSamplesTotal = 0L;
 
     // Auto snapshots
     private final Queue<ProfileSnapshot> recentAutoSnapshots = new ArrayDeque<ProfileSnapshot>();
@@ -203,6 +215,18 @@ public class ServerProfiler {
             this.lastRegionWriteZstdFallbackTotal = 0L;
             this.lastRegionWriteZstdNanosTotal = 0L;
             this.lastRegionWriteZlibNanosTotal = 0L;
+            this.lastParallelChatQueuedTotal = 0L;
+            this.lastParallelChatSentTotal = 0L;
+            this.lastParallelChatDroppedOverflowTotal = 0L;
+            this.lastParallelChatDroppedRateTotal = 0L;
+            this.lastParallelChatQueueWaitNanosTotal = 0L;
+            this.lastParallelChatQueueWaitSamplesTotal = 0L;
+            this.lastParallelVoiceConsumedTotal = 0L;
+            this.lastParallelVoiceDroppedRateTotal = 0L;
+            this.lastParallelVoiceDroppedInvalidTotal = 0L;
+            this.lastParallelVoiceDroppedOverflowTotal = 0L;
+            this.lastParallelVoiceQueueWaitNanosTotal = 0L;
+            this.lastParallelVoiceQueueWaitSamplesTotal = 0L;
         }
     }
 
@@ -367,7 +391,23 @@ public class ServerProfiler {
                                   long regionWriteZlibTotal,
                                   long regionWriteZstdFallbackTotal,
                                   long regionWriteZstdNanosTotal,
-                                  long regionWriteZlibNanosTotal) {
+                                  long regionWriteZlibNanosTotal,
+                                  int parallelChatQueueDepth,
+                                  int parallelChatQueueCapacity,
+                                  long parallelChatQueuedTotal,
+                                  long parallelChatSentTotal,
+                                  long parallelChatDroppedOverflowTotal,
+                                  long parallelChatDroppedRateTotal,
+                                  long parallelChatQueueWaitNanosTotal,
+                                  long parallelChatQueueWaitSamplesTotal,
+                                  long parallelChatQueueWaitMaxNanosSincePoll,
+                                  long parallelVoiceConsumedTotal,
+                                  long parallelVoiceDroppedRateTotal,
+                                  long parallelVoiceDroppedInvalidTotal,
+                                  long parallelVoiceDroppedOverflowTotal,
+                                  long parallelVoiceQueueWaitNanosTotal,
+                                  long parallelVoiceQueueWaitSamplesTotal,
+                                  long parallelVoiceQueueWaitMaxNanosSincePoll) {
         long now = System.currentTimeMillis();
         synchronized (telemetryLock) {
             RingBufferSample sample = getOrCreateCurrentSampleLocked(now);
@@ -401,6 +441,19 @@ public class ServerProfiler {
                 sample.chunkCompressionQueueMax = chunkCompressionQueueSize;
             }
             sample.chunkCompressionQueueCapacity = chunkCompressionQueueCapacity;
+            sample.parallelChatQueueDepthTotal += Math.max(0, parallelChatQueueDepth);
+            if (parallelChatQueueDepth > sample.parallelChatQueueDepthMax) {
+                sample.parallelChatQueueDepthMax = parallelChatQueueDepth;
+            }
+            if (parallelChatQueueCapacity > sample.parallelChatQueueCapacity) {
+                sample.parallelChatQueueCapacity = parallelChatQueueCapacity;
+            }
+            if (parallelChatQueueWaitMaxNanosSincePoll > sample.parallelChatQueueWaitMaxNanos) {
+                sample.parallelChatQueueWaitMaxNanos = parallelChatQueueWaitMaxNanosSincePoll;
+            }
+            if (parallelVoiceQueueWaitMaxNanosSincePoll > sample.parallelVoiceQueueWaitMaxNanos) {
+                sample.parallelVoiceQueueWaitMaxNanos = parallelVoiceQueueWaitMaxNanosSincePoll;
+            }
 
             long netChunkZstdPacketsDelta = computeNonNegativeDelta(netChunkZstdPacketsTotal, this.lastNetChunkZstdPacketsTotal);
             long netChunkZlibPacketsDelta = computeNonNegativeDelta(netChunkZlibPacketsTotal, this.lastNetChunkZlibPacketsTotal);
@@ -413,6 +466,18 @@ public class ServerProfiler {
             long regionWriteZstdFallbackDelta = computeNonNegativeDelta(regionWriteZstdFallbackTotal, this.lastRegionWriteZstdFallbackTotal);
             long regionWriteZstdNanosDelta = computeNonNegativeDelta(regionWriteZstdNanosTotal, this.lastRegionWriteZstdNanosTotal);
             long regionWriteZlibNanosDelta = computeNonNegativeDelta(regionWriteZlibNanosTotal, this.lastRegionWriteZlibNanosTotal);
+            long parallelChatQueuedDelta = computeNonNegativeDelta(parallelChatQueuedTotal, this.lastParallelChatQueuedTotal);
+            long parallelChatSentDelta = computeNonNegativeDelta(parallelChatSentTotal, this.lastParallelChatSentTotal);
+            long parallelChatDroppedOverflowDelta = computeNonNegativeDelta(parallelChatDroppedOverflowTotal, this.lastParallelChatDroppedOverflowTotal);
+            long parallelChatDroppedRateDelta = computeNonNegativeDelta(parallelChatDroppedRateTotal, this.lastParallelChatDroppedRateTotal);
+            long parallelChatQueueWaitNanosDelta = computeNonNegativeDelta(parallelChatQueueWaitNanosTotal, this.lastParallelChatQueueWaitNanosTotal);
+            long parallelChatQueueWaitSamplesDelta = computeNonNegativeDelta(parallelChatQueueWaitSamplesTotal, this.lastParallelChatQueueWaitSamplesTotal);
+            long parallelVoiceConsumedDelta = computeNonNegativeDelta(parallelVoiceConsumedTotal, this.lastParallelVoiceConsumedTotal);
+            long parallelVoiceDroppedRateDelta = computeNonNegativeDelta(parallelVoiceDroppedRateTotal, this.lastParallelVoiceDroppedRateTotal);
+            long parallelVoiceDroppedInvalidDelta = computeNonNegativeDelta(parallelVoiceDroppedInvalidTotal, this.lastParallelVoiceDroppedInvalidTotal);
+            long parallelVoiceDroppedOverflowDelta = computeNonNegativeDelta(parallelVoiceDroppedOverflowTotal, this.lastParallelVoiceDroppedOverflowTotal);
+            long parallelVoiceQueueWaitNanosDelta = computeNonNegativeDelta(parallelVoiceQueueWaitNanosTotal, this.lastParallelVoiceQueueWaitNanosTotal);
+            long parallelVoiceQueueWaitSamplesDelta = computeNonNegativeDelta(parallelVoiceQueueWaitSamplesTotal, this.lastParallelVoiceQueueWaitSamplesTotal);
 
             this.lastNetChunkZstdPacketsTotal = netChunkZstdPacketsTotal;
             this.lastNetChunkZlibPacketsTotal = netChunkZlibPacketsTotal;
@@ -425,6 +490,18 @@ public class ServerProfiler {
             this.lastRegionWriteZstdFallbackTotal = regionWriteZstdFallbackTotal;
             this.lastRegionWriteZstdNanosTotal = regionWriteZstdNanosTotal;
             this.lastRegionWriteZlibNanosTotal = regionWriteZlibNanosTotal;
+            this.lastParallelChatQueuedTotal = parallelChatQueuedTotal;
+            this.lastParallelChatSentTotal = parallelChatSentTotal;
+            this.lastParallelChatDroppedOverflowTotal = parallelChatDroppedOverflowTotal;
+            this.lastParallelChatDroppedRateTotal = parallelChatDroppedRateTotal;
+            this.lastParallelChatQueueWaitNanosTotal = parallelChatQueueWaitNanosTotal;
+            this.lastParallelChatQueueWaitSamplesTotal = parallelChatQueueWaitSamplesTotal;
+            this.lastParallelVoiceConsumedTotal = parallelVoiceConsumedTotal;
+            this.lastParallelVoiceDroppedRateTotal = parallelVoiceDroppedRateTotal;
+            this.lastParallelVoiceDroppedInvalidTotal = parallelVoiceDroppedInvalidTotal;
+            this.lastParallelVoiceDroppedOverflowTotal = parallelVoiceDroppedOverflowTotal;
+            this.lastParallelVoiceQueueWaitNanosTotal = parallelVoiceQueueWaitNanosTotal;
+            this.lastParallelVoiceQueueWaitSamplesTotal = parallelVoiceQueueWaitSamplesTotal;
 
             sample.netChunkZstdPackets += netChunkZstdPacketsDelta;
             sample.netChunkZlibPackets += netChunkZlibPacketsDelta;
@@ -437,6 +514,18 @@ public class ServerProfiler {
             sample.regionWriteZstdFallbacks += regionWriteZstdFallbackDelta;
             sample.regionWriteZstdNanos += regionWriteZstdNanosDelta;
             sample.regionWriteZlibNanos += regionWriteZlibNanosDelta;
+            sample.parallelChatQueued += parallelChatQueuedDelta;
+            sample.parallelChatSent += parallelChatSentDelta;
+            sample.parallelChatDroppedOverflow += parallelChatDroppedOverflowDelta;
+            sample.parallelChatDroppedRate += parallelChatDroppedRateDelta;
+            sample.parallelChatQueueWaitNanos += parallelChatQueueWaitNanosDelta;
+            sample.parallelChatQueueWaitSamples += parallelChatQueueWaitSamplesDelta;
+            sample.parallelVoiceConsumed += parallelVoiceConsumedDelta;
+            sample.parallelVoiceDroppedRate += parallelVoiceDroppedRateDelta;
+            sample.parallelVoiceDroppedInvalid += parallelVoiceDroppedInvalidDelta;
+            sample.parallelVoiceDroppedOverflow += parallelVoiceDroppedOverflowDelta;
+            sample.parallelVoiceQueueWaitNanos += parallelVoiceQueueWaitNanosDelta;
+            sample.parallelVoiceQueueWaitSamples += parallelVoiceQueueWaitSamplesDelta;
             sample.queueSampleCount++;
         }
     }
@@ -870,6 +959,22 @@ public class ServerProfiler {
             .append(" | zstdAvgUs=").append(formatDouble(snapshot.queueStats.regionWriteZstdAvgMicros))
             .append(" zlibAvgUs=").append(formatDouble(snapshot.queueStats.regionWriteZlibAvgMicros))
             .append('\n');
+        sb.append("  Parallel Chat (window) queued/sent/dropOv/dropRt: ")
+            .append(snapshot.queueStats.parallelChatQueued).append(" / ")
+            .append(snapshot.queueStats.parallelChatSent).append(" / ")
+            .append(snapshot.queueStats.parallelChatDroppedOverflow).append(" / ")
+            .append(snapshot.queueStats.parallelChatDroppedRate)
+            .append(" | qWaitAvgMs=").append(formatDouble(snapshot.queueStats.parallelChatQueueWaitAvgMs))
+            .append(" qWaitMaxMs=").append(formatDouble(snapshot.queueStats.parallelChatQueueWaitMaxMs))
+            .append('\n');
+        sb.append("  Parallel Voice TCP (window) consumed/dropRt/dropInv/dropOv: ")
+            .append(snapshot.queueStats.parallelVoiceConsumed).append(" / ")
+            .append(snapshot.queueStats.parallelVoiceDroppedRate).append(" / ")
+            .append(snapshot.queueStats.parallelVoiceDroppedInvalid).append(" / ")
+            .append(snapshot.queueStats.parallelVoiceDroppedOverflow)
+            .append(" | qWaitAvgMs=").append(formatDouble(snapshot.queueStats.parallelVoiceQueueWaitAvgMs))
+            .append(" qWaitMaxMs=").append(formatDouble(snapshot.queueStats.parallelVoiceQueueWaitMaxMs))
+            .append('\n');
         sb.append("  Movement coalesced/dropped: ").append(snapshot.queueStats.movementCoalescedPackets).append(" / ").append(snapshot.queueStats.movementDroppedPackets).append('\n');
         sb.append("  Tracking skips near/mid/far: ")
             .append(snapshot.queueStats.entityTrackingSkippedNear).append(" / ")
@@ -1078,6 +1183,21 @@ public class ServerProfiler {
         appendJsonField(sb, "regionWriteZstdFallbacks", snapshot.queueStats.regionWriteZstdFallbacks, true, 4);
         appendJsonField(sb, "regionWriteZstdAvgMicros", snapshot.queueStats.regionWriteZstdAvgMicros, true, 4);
         appendJsonField(sb, "regionWriteZlibAvgMicros", snapshot.queueStats.regionWriteZlibAvgMicros, true, 4);
+        appendJsonField(sb, "parallelChatQueueDepthAvg", snapshot.queueStats.parallelChatQueueDepthAvg, true, 4);
+        appendJsonField(sb, "parallelChatQueueDepthMax", snapshot.queueStats.parallelChatQueueDepthMax, true, 4);
+        appendJsonField(sb, "parallelChatQueueCapacity", snapshot.queueStats.parallelChatQueueCapacity, true, 4);
+        appendJsonField(sb, "parallelChatQueued", snapshot.queueStats.parallelChatQueued, true, 4);
+        appendJsonField(sb, "parallelChatSent", snapshot.queueStats.parallelChatSent, true, 4);
+        appendJsonField(sb, "parallelChatDroppedOverflow", snapshot.queueStats.parallelChatDroppedOverflow, true, 4);
+        appendJsonField(sb, "parallelChatDroppedRate", snapshot.queueStats.parallelChatDroppedRate, true, 4);
+        appendJsonField(sb, "parallelChatQueueWaitAvgMs", snapshot.queueStats.parallelChatQueueWaitAvgMs, true, 4);
+        appendJsonField(sb, "parallelChatQueueWaitMaxMs", snapshot.queueStats.parallelChatQueueWaitMaxMs, true, 4);
+        appendJsonField(sb, "parallelVoiceConsumed", snapshot.queueStats.parallelVoiceConsumed, true, 4);
+        appendJsonField(sb, "parallelVoiceDroppedRate", snapshot.queueStats.parallelVoiceDroppedRate, true, 4);
+        appendJsonField(sb, "parallelVoiceDroppedInvalid", snapshot.queueStats.parallelVoiceDroppedInvalid, true, 4);
+        appendJsonField(sb, "parallelVoiceDroppedOverflow", snapshot.queueStats.parallelVoiceDroppedOverflow, true, 4);
+        appendJsonField(sb, "parallelVoiceQueueWaitAvgMs", snapshot.queueStats.parallelVoiceQueueWaitAvgMs, true, 4);
+        appendJsonField(sb, "parallelVoiceQueueWaitMaxMs", snapshot.queueStats.parallelVoiceQueueWaitMaxMs, true, 4);
         appendJsonField(sb, "movementCoalescedPackets", snapshot.queueStats.movementCoalescedPackets, true, 4);
         appendJsonField(sb, "movementDroppedPackets", snapshot.queueStats.movementDroppedPackets, true, 4);
         appendJsonField(sb, "entityTrackingSkippedNear", snapshot.queueStats.entityTrackingSkippedNear, true, 4);
@@ -1308,6 +1428,19 @@ public class ServerProfiler {
                 .append(statusQueueStats.regionWriteZlib).append('/')
                 .append(statusQueueStats.regionWriteZstdFallbacks)
                 .append(" zUs=").append(formatDouble(statusQueueStats.regionWriteZstdAvgMicros));
+            sb.append(" | Comm(chat q/s/do/dr=")
+                .append(statusQueueStats.parallelChatQueued).append('/')
+                .append(statusQueueStats.parallelChatSent).append('/')
+                .append(statusQueueStats.parallelChatDroppedOverflow).append('/')
+                .append(statusQueueStats.parallelChatDroppedRate)
+                .append(" qMs=").append(formatDouble(statusQueueStats.parallelChatQueueWaitAvgMs))
+                .append("; voice c/dr/di/do=")
+                .append(statusQueueStats.parallelVoiceConsumed).append('/')
+                .append(statusQueueStats.parallelVoiceDroppedRate).append('/')
+                .append(statusQueueStats.parallelVoiceDroppedInvalid).append('/')
+                .append(statusQueueStats.parallelVoiceDroppedOverflow)
+                .append(" qMs=").append(formatDouble(statusQueueStats.parallelVoiceQueueWaitAvgMs))
+                .append(')');
         }
 
         sb.append(" | AutoSnap: ").append(autoSnapshotEnabled ? "on" : "off");
@@ -1477,11 +1610,16 @@ public class ServerProfiler {
         double highTotal = 0D;
         double lowTotal = 0D;
         double outBytesTotal = 0D;
+        double parallelChatDepthTotal = 0D;
         long sampleCount = 0L;
         long netChunkZstdNanosTotal = 0L;
         long netChunkZlibNanosTotal = 0L;
         long regionWriteZstdNanosTotal = 0L;
         long regionWriteZlibNanosTotal = 0L;
+        long parallelChatQueueWaitNanosTotal = 0L;
+        long parallelChatQueueWaitSamplesTotal = 0L;
+        long parallelVoiceQueueWaitNanosTotal = 0L;
+        long parallelVoiceQueueWaitSamplesTotal = 0L;
 
         for (RingBufferSample sample : samples) {
             long divisor = Math.max(1L, sample.queueSampleCount);
@@ -1490,6 +1628,7 @@ public class ServerProfiler {
             highTotal += sample.outboundHighQueueDepthTotal / (double) divisor;
             lowTotal += sample.outboundLowQueueDepthTotal / (double) divisor;
             outBytesTotal += sample.outboundQueuedBytesTotal / (double) divisor;
+            parallelChatDepthTotal += sample.parallelChatQueueDepthTotal / (double) divisor;
             sampleCount++;
 
             if (sample.commandQueueDepthMax > stats.commandQueueMax) {
@@ -1513,6 +1652,20 @@ public class ServerProfiler {
             if (sample.chunkCompressionQueueCapacity > stats.chunkCompressionCapacity) {
                 stats.chunkCompressionCapacity = sample.chunkCompressionQueueCapacity;
             }
+            if (sample.parallelChatQueueDepthMax > stats.parallelChatQueueDepthMax) {
+                stats.parallelChatQueueDepthMax = sample.parallelChatQueueDepthMax;
+            }
+            if (sample.parallelChatQueueCapacity > stats.parallelChatQueueCapacity) {
+                stats.parallelChatQueueCapacity = sample.parallelChatQueueCapacity;
+            }
+            double parallelChatQueueWaitMaxMs = sample.parallelChatQueueWaitMaxNanos / 1_000_000.0D;
+            if (parallelChatQueueWaitMaxMs > stats.parallelChatQueueWaitMaxMs) {
+                stats.parallelChatQueueWaitMaxMs = parallelChatQueueWaitMaxMs;
+            }
+            double parallelVoiceQueueWaitMaxMs = sample.parallelVoiceQueueWaitMaxNanos / 1_000_000.0D;
+            if (parallelVoiceQueueWaitMaxMs > stats.parallelVoiceQueueWaitMaxMs) {
+                stats.parallelVoiceQueueWaitMaxMs = parallelVoiceQueueWaitMaxMs;
+            }
             if (sample.pendingLoginsMax > stats.pendingLoginsMax) {
                 stats.pendingLoginsMax = sample.pendingLoginsMax;
             }
@@ -1531,10 +1684,22 @@ public class ServerProfiler {
             stats.regionWriteZstd += sample.regionWriteZstd;
             stats.regionWriteZlib += sample.regionWriteZlib;
             stats.regionWriteZstdFallbacks += sample.regionWriteZstdFallbacks;
+            stats.parallelChatQueued += sample.parallelChatQueued;
+            stats.parallelChatSent += sample.parallelChatSent;
+            stats.parallelChatDroppedOverflow += sample.parallelChatDroppedOverflow;
+            stats.parallelChatDroppedRate += sample.parallelChatDroppedRate;
+            stats.parallelVoiceConsumed += sample.parallelVoiceConsumed;
+            stats.parallelVoiceDroppedRate += sample.parallelVoiceDroppedRate;
+            stats.parallelVoiceDroppedInvalid += sample.parallelVoiceDroppedInvalid;
+            stats.parallelVoiceDroppedOverflow += sample.parallelVoiceDroppedOverflow;
             netChunkZstdNanosTotal += sample.netChunkZstdCompressNanos;
             netChunkZlibNanosTotal += sample.netChunkZlibCompressNanos;
             regionWriteZstdNanosTotal += sample.regionWriteZstdNanos;
             regionWriteZlibNanosTotal += sample.regionWriteZlibNanos;
+            parallelChatQueueWaitNanosTotal += sample.parallelChatQueueWaitNanos;
+            parallelChatQueueWaitSamplesTotal += sample.parallelChatQueueWaitSamples;
+            parallelVoiceQueueWaitNanosTotal += sample.parallelVoiceQueueWaitNanos;
+            parallelVoiceQueueWaitSamplesTotal += sample.parallelVoiceQueueWaitSamples;
         }
 
         if (sampleCount > 0L) {
@@ -1543,12 +1708,19 @@ public class ServerProfiler {
             stats.outboundHighAvg = highTotal / sampleCount;
             stats.outboundLowAvg = lowTotal / sampleCount;
             stats.outboundBytesAvg = outBytesTotal / sampleCount;
+            stats.parallelChatQueueDepthAvg = parallelChatDepthTotal / sampleCount;
         }
 
         stats.netChunkZstdAvgMicros = nanosPerOperationMicros(netChunkZstdNanosTotal, stats.netChunkZstdPackets);
         stats.netChunkZlibAvgMicros = nanosPerOperationMicros(netChunkZlibNanosTotal, stats.netChunkZlibPackets);
         stats.regionWriteZstdAvgMicros = nanosPerOperationMicros(regionWriteZstdNanosTotal, stats.regionWriteZstd);
         stats.regionWriteZlibAvgMicros = nanosPerOperationMicros(regionWriteZlibNanosTotal, stats.regionWriteZlib);
+        if (parallelChatQueueWaitSamplesTotal > 0L) {
+            stats.parallelChatQueueWaitAvgMs = (parallelChatQueueWaitNanosTotal / (double) parallelChatQueueWaitSamplesTotal) / 1_000_000.0D;
+        }
+        if (parallelVoiceQueueWaitSamplesTotal > 0L) {
+            stats.parallelVoiceQueueWaitAvgMs = (parallelVoiceQueueWaitNanosTotal / (double) parallelVoiceQueueWaitSamplesTotal) / 1_000_000.0D;
+        }
 
         return stats;
     }
@@ -2102,6 +2274,23 @@ public class ServerProfiler {
         public long regionWriteZstdFallbacks;
         public long regionWriteZstdNanos;
         public long regionWriteZlibNanos;
+        public long parallelChatQueueDepthTotal;
+        public int parallelChatQueueDepthMax;
+        public int parallelChatQueueCapacity;
+        public long parallelChatQueued;
+        public long parallelChatSent;
+        public long parallelChatDroppedOverflow;
+        public long parallelChatDroppedRate;
+        public long parallelChatQueueWaitNanos;
+        public long parallelChatQueueWaitSamples;
+        public long parallelChatQueueWaitMaxNanos;
+        public long parallelVoiceConsumed;
+        public long parallelVoiceDroppedRate;
+        public long parallelVoiceDroppedInvalid;
+        public long parallelVoiceDroppedOverflow;
+        public long parallelVoiceQueueWaitNanos;
+        public long parallelVoiceQueueWaitSamples;
+        public long parallelVoiceQueueWaitMaxNanos;
         public int queueSampleCount;
 
         public int schedulerSamples;
@@ -2180,6 +2369,23 @@ public class ServerProfiler {
             this.regionWriteZstdFallbacks = other.regionWriteZstdFallbacks;
             this.regionWriteZstdNanos = other.regionWriteZstdNanos;
             this.regionWriteZlibNanos = other.regionWriteZlibNanos;
+            this.parallelChatQueueDepthTotal = other.parallelChatQueueDepthTotal;
+            this.parallelChatQueueDepthMax = other.parallelChatQueueDepthMax;
+            this.parallelChatQueueCapacity = other.parallelChatQueueCapacity;
+            this.parallelChatQueued = other.parallelChatQueued;
+            this.parallelChatSent = other.parallelChatSent;
+            this.parallelChatDroppedOverflow = other.parallelChatDroppedOverflow;
+            this.parallelChatDroppedRate = other.parallelChatDroppedRate;
+            this.parallelChatQueueWaitNanos = other.parallelChatQueueWaitNanos;
+            this.parallelChatQueueWaitSamples = other.parallelChatQueueWaitSamples;
+            this.parallelChatQueueWaitMaxNanos = other.parallelChatQueueWaitMaxNanos;
+            this.parallelVoiceConsumed = other.parallelVoiceConsumed;
+            this.parallelVoiceDroppedRate = other.parallelVoiceDroppedRate;
+            this.parallelVoiceDroppedInvalid = other.parallelVoiceDroppedInvalid;
+            this.parallelVoiceDroppedOverflow = other.parallelVoiceDroppedOverflow;
+            this.parallelVoiceQueueWaitNanos = other.parallelVoiceQueueWaitNanos;
+            this.parallelVoiceQueueWaitSamples = other.parallelVoiceQueueWaitSamples;
+            this.parallelVoiceQueueWaitMaxNanos = other.parallelVoiceQueueWaitMaxNanos;
             this.queueSampleCount = other.queueSampleCount;
             this.schedulerSamples = other.schedulerSamples;
             this.schedulerMovedToSyncedTotal = other.schedulerMovedToSyncedTotal;
@@ -2297,6 +2503,21 @@ public class ServerProfiler {
         public long regionWriteZstdFallbacks;
         public double regionWriteZstdAvgMicros;
         public double regionWriteZlibAvgMicros;
+        public double parallelChatQueueDepthAvg;
+        public int parallelChatQueueDepthMax;
+        public int parallelChatQueueCapacity;
+        public long parallelChatQueued;
+        public long parallelChatSent;
+        public long parallelChatDroppedOverflow;
+        public long parallelChatDroppedRate;
+        public double parallelChatQueueWaitAvgMs;
+        public double parallelChatQueueWaitMaxMs;
+        public long parallelVoiceConsumed;
+        public long parallelVoiceDroppedRate;
+        public long parallelVoiceDroppedInvalid;
+        public long parallelVoiceDroppedOverflow;
+        public double parallelVoiceQueueWaitAvgMs;
+        public double parallelVoiceQueueWaitMaxMs;
         public long movementCoalescedPackets;
         public long movementDroppedPackets;
         public long entityTrackingSkippedNear;

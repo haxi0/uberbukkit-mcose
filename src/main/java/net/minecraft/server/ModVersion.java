@@ -6,7 +6,7 @@ package net.minecraft.server;
  */
 public class ModVersion {
     /** The current mod version number (e.g., "1.4", "1.5", "2.0") */
-    public static final String VERSION = "1.7.1";
+    public static final String VERSION = "1.8";
     
     /** The full mod name */
     public static final String MOD_NAME = "Minecraft Oldschool Edition";

@@ -369,8 +369,14 @@ public abstract class EntityLiving extends Entity {
                 
                 this.ao = 1.5F;
                 boolean flag = true;
+                int noDamageWindow = this.maxNoDamageTicks;
 
-                if ((float) this.noDamageTicks > (float) this.maxNoDamageTicks / 2.0F) {
+                // Match multiplayer melee pacing to the client hold/click cadence (5 ticks).
+                if (entity instanceof EntityPlayer) {
+                    noDamageWindow = Math.min(noDamageWindow, 10);
+                }
+
+                if ((float) this.noDamageTicks > (float) noDamageWindow / 2.0F) {
                     if (i <= this.lastDamage) {
                         return false;
                     }
@@ -381,7 +387,7 @@ public abstract class EntityLiving extends Entity {
                 } else {
                     this.lastDamage = i;
                     this.ac = this.health;
-                    this.noDamageTicks = this.maxNoDamageTicks;
+                    this.noDamageTicks = noDamageWindow;
                     this.c(i);
                     this.hurtTicks = this.ae = 10;
                 }

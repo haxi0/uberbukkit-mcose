@@ -93,6 +93,10 @@ public class AsyncChunkGenerator {
             return "CLASSIC";
         }
 
+        if (terrainType == 7) {
+            return "INFDEV";
+        }
+
         return "UNKNOWN";
     }
     

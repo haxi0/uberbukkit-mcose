@@ -17,10 +17,10 @@ public final class WorldTypeRegistryBootstrap {
         register("sky", 3);
         register("alpha_snow", 5);
         register("classic", 6);
+        register("infdev", 7);
     }
 
     private static void register(String path, int id) {
         WorldTypeRegistryApi.register(new ResourceLocation("minecraft", path), Integer.valueOf(id));
     }
 }
-

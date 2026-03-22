@@ -8,6 +8,8 @@ import org.bukkit.event.entity.ExplosionPrimeEvent;
 // CraftBukkit end
 
 public class EntityCreeper extends EntityMonster {
+    private static final EntityDataAccessor<Byte> DATA_SWELL_DIR_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<Byte> DATA_POWERED_ID = new EntityDataAccessor<Byte>(17, EntityDataSerializers.BYTE);
 
     int fuseTicks;
     int b;
@@ -17,22 +19,39 @@ public class EntityCreeper extends EntityMonster {
         this.texture = "/mob/creeper.png";
     }
 
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.getSynchedEntityData().define(DATA_SWELL_DIR_ID, Byte.valueOf((byte)-1));
+        this.getSynchedEntityData().define(DATA_POWERED_ID, Byte.valueOf((byte)0));
+    }
+
     protected void b() {
         super.b();
-        this.datawatcher.a(16, Byte.valueOf((byte) -1));
-        this.datawatcher.a(17, Byte.valueOf((byte) 0));
+        this.datawatcher.a(16, Byte.valueOf((byte)this.getSwellDirection()));
+        this.datawatcher.a(17, Byte.valueOf((byte)(this.getPoweredFlag() ? 1 : 0)));
+    }
+
+    public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+        super.onSyncedDataUpdated(accessor);
+        if (accessor == DATA_SWELL_DIR_ID) {
+            Byte value = this.getSynchedEntityData().get(DATA_SWELL_DIR_ID);
+            this.datawatcher.watch(16, value == null ? Byte.valueOf((byte)-1) : value);
+        } else if (accessor == DATA_POWERED_ID) {
+            Byte value = this.getSynchedEntityData().get(DATA_POWERED_ID);
+            this.datawatcher.watch(17, value == null ? Byte.valueOf((byte)0) : value);
+        }
     }
 
     public void b(NBTTagCompound nbttagcompound) {
         super.b(nbttagcompound);
-        if (this.datawatcher.a(17) == 1) {
+        if (this.getPoweredFlag()) {
             nbttagcompound.a("powered", true);
         }
     }
 
     public void a(NBTTagCompound nbttagcompound) {
         super.a(nbttagcompound);
-        this.datawatcher.watch(17, Byte.valueOf((byte) (nbttagcompound.m("powered") ? 1 : 0)));
+        this.setPoweredFlag(nbttagcompound.m("powered"));
     }
 
     protected void b(Entity entity, float f) {
@@ -140,7 +159,7 @@ public class EntityCreeper extends EntityMonster {
     }
 
     public boolean isPowered() {
-        return this.datawatcher.a(17) == 1;
+        return this.getPoweredFlag();
     }
 
     protected int j() {
@@ -148,11 +167,11 @@ public class EntityCreeper extends EntityMonster {
     }
 
     private int x() {
-        return this.datawatcher.a(16);
+        return this.getSwellDirection();
     }
 
     private void e(int i) {
-        this.datawatcher.watch(16, Byte.valueOf((byte) i));
+        this.setSwellDirection(i);
     }
 
     public void a(EntityWeatherStorm entityweatherstorm) {
@@ -170,10 +189,40 @@ public class EntityCreeper extends EntityMonster {
     }
 
     public void setPowered(boolean powered) {
-        if (!powered) {
-            this.datawatcher.watch(17, Byte.valueOf((byte) 0));
-        } else
-            // CraftBukkit end
-            this.datawatcher.watch(17, Byte.valueOf((byte) 1));
+        this.setPoweredFlag(powered);
+    }
+
+    private int getSwellDirection() {
+        Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_SWELL_DIR_ID);
+        if (value != null) {
+            return value.byteValue();
+        }
+        return this.datawatcher.a(16);
+    }
+
+    private void setSwellDirection(int direction) {
+        byte value = (byte)direction;
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_SWELL_DIR_ID, Byte.valueOf(value));
+        } else {
+            this.datawatcher.watch(16, Byte.valueOf(value));
+        }
+    }
+
+    private boolean getPoweredFlag() {
+        Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_POWERED_ID);
+        if (value != null) {
+            return value.byteValue() == 1;
+        }
+        return this.datawatcher.a(17) == 1;
+    }
+
+    private void setPoweredFlag(boolean powered) {
+        byte value = (byte)(powered ? 1 : 0);
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_POWERED_ID, Byte.valueOf(value));
+        } else {
+            this.datawatcher.watch(17, Byte.valueOf(value));
+        }
     }
 }

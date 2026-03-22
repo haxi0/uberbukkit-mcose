@@ -1,6 +1,7 @@
 package net.minecraft.server;
 
 public class EntitySlime extends EntityLiving implements IMonster {
+    private static final EntityDataAccessor<Byte> DATA_SLIME_SIZE_ID = new EntityDataAccessor<Byte>(16, EntityDataSerializers.BYTE);
 
     public float a;
     public float b;
@@ -16,20 +17,33 @@ public class EntitySlime extends EntityLiving implements IMonster {
         this.setSize(i);
     }
 
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.getSynchedEntityData().define(DATA_SLIME_SIZE_ID, Byte.valueOf((byte)1));
+    }
+
     protected void b() {
         super.b();
-        this.datawatcher.a(16, new Byte((byte) 1));
+        this.datawatcher.a(16, Byte.valueOf(this.getSyncedSlimeSize()));
+    }
+
+    public void onSyncedDataUpdated(EntityDataAccessor<?> accessor) {
+        super.onSyncedDataUpdated(accessor);
+        if (accessor == DATA_SLIME_SIZE_ID) {
+            Byte value = this.getSynchedEntityData().get(DATA_SLIME_SIZE_ID);
+            this.datawatcher.watch(16, value == null ? Byte.valueOf((byte)1) : value);
+        }
     }
 
     public void setSize(int i) {
-        this.datawatcher.watch(16, new Byte((byte) i));
+        this.setSyncedSlimeSize(i);
         this.b(0.6F * (float) i, 0.6F * (float) i);
         this.health = i * i;
         this.setPosition(this.locX, this.locY, this.locZ);
     }
 
     public int getSize() {
-        return this.datawatcher.a(16);
+        return this.getSyncedSlimeSize();
     }
 
     public void b(NBTTagCompound nbttagcompound) {
@@ -156,5 +170,22 @@ public class EntitySlime extends EntityLiving implements IMonster {
 
     protected float k() {
         return 0.6F;
+    }
+
+    private byte getSyncedSlimeSize() {
+        Byte value = this.getSynchedEntityData() == null ? null : this.getSynchedEntityData().get(DATA_SLIME_SIZE_ID);
+        if (value != null) {
+            return value.byteValue();
+        }
+        return this.datawatcher.a(16);
+    }
+
+    private void setSyncedSlimeSize(int size) {
+        byte value = (byte)size;
+        if (this.getSynchedEntityData() != null) {
+            this.getSynchedEntityData().set(DATA_SLIME_SIZE_ID, Byte.valueOf(value));
+        } else {
+            this.datawatcher.watch(16, Byte.valueOf(value));
+        }
     }
 }

@@ -38,7 +38,7 @@ public class BlockPiston extends Block {
     public void postPlace(World world, int i, int j, int k, EntityLiving entityliving) {
         int l = c(world, i, j, k, (EntityHuman) entityliving);
 
-        world.setData(i, j, k, l);
+        CriticalBlockStateAccess.setMetadata(world, i, j, k, l, true);
         if (!world.isStatic) {
             this.g(world, i, j, k);
         }
@@ -57,7 +57,7 @@ public class BlockPiston extends Block {
     }
 
     private void g(World world, int i, int j, int k) {
-        int l = world.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getPistonMetadata(world, i, j, k);
         int i1 = c(l);
         boolean flag = this.f(world, i, j, k, i1);
 
@@ -82,7 +82,7 @@ public class BlockPiston extends Block {
                     }
                     // CraftBukkit end
 
-                    world.setRawData(i, j, k, i1 | 8);
+                    CriticalBlockStateAccess.setMetadata(world, i, j, k, i1 | 8, false);
                     world.playNote(i, j, k, 0, i1);
                 }
             } else if (!flag && d(l)) {
@@ -97,7 +97,7 @@ public class BlockPiston extends Block {
                 }
                 // CraftBukkit end
 
-                world.setRawData(i, j, k, i1);
+                CriticalBlockStateAccess.setMetadata(world, i, j, k, i1, false);
                 world.playNote(i, j, k, 1, i1);
             }
         }
@@ -111,7 +111,7 @@ public class BlockPiston extends Block {
         this.b = true;
         if (l == 0) {
             if (this.i(world, i, j, k, i1)) {
-                world.setData(i, j, k, i1 | 8);
+                CriticalBlockStateAccess.setMetadata(world, i, j, k, i1 | 8, true);
                 world.makeSound((double) i + 0.5D, (double) j + 0.5D, (double) k + 0.5D, "tile.piston.out", 0.5F, world.random.nextFloat() * 0.25F + 0.6F);
             }
         } else if (l == 1) {
@@ -173,7 +173,7 @@ public class BlockPiston extends Block {
     }
 
     public void a(IBlockAccess iblockaccess, int i, int j, int k) {
-        int l = iblockaccess.getData(i, j, k);
+        int l = CriticalBlockStateAccess.getPistonMetadata(iblockaccess, i, j, k);
 
         if (d(l)) {
             switch (c(l)) {
@@ -259,7 +259,7 @@ public class BlockPiston extends Block {
                 if (!flag && Block.byId[i].e() == 1) {
                     return false;
                 }
-            } else if (d(world.getData(j, k, l))) {
+            } else if (d(CriticalBlockStateAccess.getPistonMetadata(world, j, k, l))) {
                 return false;
             }
 
