@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -324,6 +325,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
         this.server = minecraftserver.server;
         this.firePacketEvents = PoseidonConfig.getInstance().getBoolean("settings.packet-events.enabled", false); //Poseidon
         this.msgPlayerLeave = PoseidonConfig.getInstance().getConfigString("message.player.leave");
+        this.lastTabListNameKey = this.getCurrentTabListNameKey();
     }
 
     //Project Poseidon - Start
@@ -373,6 +375,7 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
 
     // Store the last block right clicked and what type it was
     private int lastMaterial;
+    private String lastTabListNameKey;
 
     public CraftPlayer getPlayer() {
         return (this.player == null) ? null : (CraftPlayer) this.player.getBukkitEntity();
@@ -384,6 +387,24 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
     public Integer lastDigY = null;
     public Integer lastDigZ = null;
     public Integer lastDigFace = null;
+
+    private String getCurrentTabListNameKey() {
+        if (this.player == null) {
+            return null;
+        }
+
+        String tabName = this.player.listName != null ? this.player.listName : this.player.name;
+        if (tabName == null) {
+            return null;
+        }
+
+        // Packet201 player list keys are protocol-limited to 16 characters.
+        if (tabName.length() > 16) {
+            tabName = tabName.substring(0, 16);
+        }
+
+        return tabName;
+    }
 
 
     public void a() {
@@ -400,8 +421,19 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 this.lastTick = MinecraftServer.currentTick;
                 int currentPing = this.b();
                 if (this.player != null) {
-                    Packet201PlayerInfo update = new Packet201PlayerInfo(this.player.name, true, currentPing);
-                    this.minecraftServer.serverConfigurationManager.sendAll(update);
+                    String tabListNameKey = this.getCurrentTabListNameKey();
+                    if (tabListNameKey != null) {
+                        if (this.lastTabListNameKey != null && !this.lastTabListNameKey.equals(tabListNameKey)) {
+                            this.minecraftServer.serverConfigurationManager.sendAll(
+                                new Packet201PlayerInfo(this.lastTabListNameKey, false, 0)
+                            );
+                        }
+
+                        this.minecraftServer.serverConfigurationManager.sendAll(
+                            new Packet201PlayerInfo(tabListNameKey, true, currentPing)
+                        );
+                        this.lastTabListNameKey = tabListNameKey;
+                    }
                 }
             }
         } catch (Throwable ignore) {}
@@ -943,8 +975,23 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
                 return PARALLEL_FAIL_OPEN_TO_LEGACY ? false : true;
             }
 
-            if (!dispatcher.enqueueRawChat(this.player, s)) {
-                return PARALLEL_FAIL_OPEN_TO_LEGACY ? false : true;
+            Player bukkitPlayer = this.getPlayer();
+            if (bukkitPlayer == null) {
+                return true;
+            }
+
+            PlayerChatEvent event = new PlayerChatEvent(bukkitPlayer, s);
+            this.server.getPluginManager().callEvent(event);
+
+            if (event.isCancelled()) {
+                return true;
+            }
+
+            String formatted = String.format(event.getFormat(), event.getPlayer().getDisplayName(), event.getMessage());
+            List<EntityPlayer> recipients = this.getParallelChatRecipients(event);
+
+            if (!dispatcher.enqueueFormattedChat(this.player, formatted, recipients)) {
+                dispatcher.dispatchFormattedChat(formatted, recipients);
             }
 
             return true;
@@ -965,6 +1012,26 @@ public class NetServerHandler extends NetHandler implements ICommandListener {
             recordVoiceTcpDropReason("parallel-failure");
             return PARALLEL_FAIL_OPEN_TO_LEGACY ? false : true;
         }
+    }
+
+    private List<EntityPlayer> getParallelChatRecipients(PlayerChatEvent event) {
+        List<EntityPlayer> recipients = new ArrayList<EntityPlayer>();
+        if (event == null) {
+            return recipients;
+        }
+
+        for (Player recipient : event.getRecipients()) {
+            if (!(recipient instanceof CraftPlayer)) {
+                continue;
+            }
+
+            EntityPlayer handle = ((CraftPlayer) recipient).getHandle();
+            if (handle != null) {
+                recipients.add(handle);
+            }
+        }
+
+        return recipients;
     }
 
     public void handle64Voice(Packet64Voice packet64voice) {

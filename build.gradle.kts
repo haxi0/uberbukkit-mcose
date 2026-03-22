@@ -87,8 +87,44 @@ tasks.shadowJar {
     exclude("junit/**")
 }
 
+val haxiPluginProject = project(":haxiPlugin")
+val haxiPluginOutputJar = haxiPluginProject.layout.buildDirectory.file(
+    "libs/${haxiPluginProject.name}-${haxiPluginProject.version}.jar"
+)
+
+val copyServerJarToFinal by tasks.registering(Copy::class) {
+    group = "build"
+    description = "Copies the built server jar to final/server.jar."
+
+    dependsOn(tasks.shadowJar)
+    from(tasks.shadowJar.flatMap { it.archiveFile })
+    into(layout.projectDirectory.dir("final"))
+    rename { "server.jar" }
+}
+
+val copyHaxiPluginJarToFinal by tasks.registering(Copy::class) {
+    group = "build"
+    description = "Copies haxiPlugin jar to final/plugins/haxiPlugin.jar."
+
+    dependsOn(":haxiPlugin:jar")
+    from(haxiPluginOutputJar)
+    into(layout.projectDirectory.dir("final/plugins"))
+    rename { "haxiPlugin.jar" }
+}
+
+val copyFinalArtifacts by tasks.registering {
+    group = "build"
+    description = "Copies server and haxiPlugin jars into final/."
+    dependsOn(copyServerJarToFinal, copyHaxiPluginJarToFinal)
+}
+
 tasks.assemble {
     dependsOn(tasks.shadowJar)
+    dependsOn(copyFinalArtifacts)
+}
+
+tasks.build {
+    dependsOn(copyFinalArtifacts)
 }
 
 // shadowjar creates handy task already, but if you don't like the name, just change this to "run" and set the classpath manually

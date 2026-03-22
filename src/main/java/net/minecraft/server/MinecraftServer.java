@@ -262,6 +262,12 @@ public class MinecraftServer implements Runnable, ICommandListener {
 
         try {
             this.networkListenThread = new NetworkListenThread(this, inetaddress, i);
+            log.info("Network listener bound on "
+                + this.networkListenThread.getBoundAddressForLog()
+                + ":" + this.networkListenThread.getBoundPort());
+            if (!this.networkListenThread.isAcceptThreadAlive()) {
+                throw new IOException("Network accept thread is not alive after bind");
+            }
         } catch (Throwable ioexception) { // CraftBukkit - IOException -> Throwable
             log.warning("**** FAILED TO BIND TO PORT!");
             log.log(Level.WARNING, "The exception was: " + ioexception.toString());
@@ -322,6 +328,11 @@ public class MinecraftServer implements Runnable, ICommandListener {
         this.startCommunicationDispatcher();
 
         this.setStartupReadinessStatus(StartupReadinessStatus.READY);
+        if (this.networkListenThread != null) {
+            log.info("Server network ready on "
+                + this.networkListenThread.getBoundAddressForLog()
+                + ":" + this.networkListenThread.getBoundPort());
+        }
         log.info("Done (" + time + ")! For help, type \"help\" or \"?\"");
 
         // log rotator process start.

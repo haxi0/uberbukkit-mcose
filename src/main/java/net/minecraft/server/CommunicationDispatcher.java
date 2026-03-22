@@ -2,6 +2,7 @@ package net.minecraft.server;
 
 import org.bukkit.craftbukkit.TextWrapper;
 
+import java.util.ArrayList;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -86,8 +87,8 @@ public class CommunicationDispatcher {
         return running;
     }
 
-    public boolean enqueueRawChat(EntityPlayer sender, String message) {
-        if (!running || sender == null || sender.name == null || message == null) {
+    public boolean enqueueFormattedChat(EntityPlayer sender, String formattedMessage, List<EntityPlayer> recipients) {
+        if (!running || sender == null || sender.name == null || formattedMessage == null) {
             return false;
         }
 
@@ -103,7 +104,8 @@ public class CommunicationDispatcher {
                 parallelChatDroppedOverflowTotal.incrementAndGet();
                 maybeLogOverflow(nowMs, sender.name, CHAT_QUEUE_CAPACITY);
             }
-            chatQueue.offerLast(new QueuedChatMessage(sender.name, message, enqueueNanos));
+            List<EntityPlayer> recipientSnapshot = recipients == null ? null : new ArrayList<EntityPlayer>(recipients);
+            chatQueue.offerLast(new QueuedChatMessage(sender.name, formattedMessage, recipientSnapshot, enqueueNanos));
             parallelChatQueuedTotal.incrementAndGet();
             chatQueueLock.notifyAll();
         }
@@ -189,20 +191,27 @@ public class CommunicationDispatcher {
         parallelChatQueueWaitSamplesTotal.incrementAndGet();
         updateMax(parallelChatQueueWaitMaxNanosSincePoll, waitNanos);
 
-        String formatted = "<" + queued.senderName + "> " + queued.message;
-        String[] modernWrapped = TextWrapper.wrapText(formatted);
-        String[] legacyWrapped = TextWrapper.wrapTextLegacy(formatted);
+        dispatchFormattedChat(queued.formattedMessage, queued.recipients);
+        parallelChatSentTotal.incrementAndGet();
+    }
+
+    public void dispatchFormattedChat(String formattedMessage, List<EntityPlayer> recipients) {
+        if (formattedMessage == null) {
+            return;
+        }
+
+        String[] modernWrapped = TextWrapper.wrapText(formattedMessage);
+        String[] legacyWrapped = TextWrapper.wrapTextLegacy(formattedMessage);
 
         if (server == null || server.serverConfigurationManager == null) {
-            parallelChatSentTotal.incrementAndGet();
             return;
         }
 
         // Keep server/GUI chat logging behavior consistent with the legacy path.
-        log.info(formatted);
+        log.info(formattedMessage);
 
-        List<EntityPlayer> recipients = server.serverConfigurationManager.getOnlinePlayersSnapshot();
-        for (EntityPlayer recipient : recipients) {
+        List<EntityPlayer> recipientsToSend = recipients != null ? recipients : server.serverConfigurationManager.getOnlinePlayersSnapshot();
+        for (EntityPlayer recipient : recipientsToSend) {
             if (recipient == null || recipient.netServerHandler == null || recipient.netServerHandler.networkManager == null) {
                 continue;
             }
@@ -213,8 +222,6 @@ public class CommunicationDispatcher {
                 recipient.netServerHandler.networkManager.queue(new Packet3Chat(wrapped[i]));
             }
         }
-
-        parallelChatSentTotal.incrementAndGet();
     }
 
     private void maybeLogOverflow(long now, String senderName, int capacity) {
@@ -238,12 +245,14 @@ public class CommunicationDispatcher {
 
     private static final class QueuedChatMessage {
         private final String senderName;
-        private final String message;
+        private final String formattedMessage;
+        private final List<EntityPlayer> recipients;
         private final long enqueueNanos;
 
-        private QueuedChatMessage(String senderName, String message, long enqueueNanos) {
+        private QueuedChatMessage(String senderName, String formattedMessage, List<EntityPlayer> recipients, long enqueueNanos) {
             this.senderName = senderName;
-            this.message = message;
+            this.formattedMessage = formattedMessage;
+            this.recipients = recipients;
             this.enqueueNanos = enqueueNanos;
         }
     }

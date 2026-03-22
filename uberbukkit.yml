@@ -71,5 +71,7 @@ mechanics:
     flammable_fences_stairs: true
     allow_bone_meal_on_grass: true
     spawn_slimes: true
+    farmland_trampling: true
+    modern_farmland: true
 experimental:
     force_fix_chunk_coords_corruption: false

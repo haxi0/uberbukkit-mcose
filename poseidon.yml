@@ -110,6 +110,25 @@ settings:
         item-update-frequency: 10
         item-update-frequency-info: 'How often (in ticks) dropped item positions are
             sent to clients. Default: 10'
+        action-priority:
+            mode-info: Tracking pressure control mode. adaptive = queue-aware hysteresis, off = disabled.
+            mob-update-frequency: 4
+            near-chunk-radius: 2
+            mid-chunk-radius: 4
+            exit-high-queue: 8
+            enabled: true
+            enter-high-queue: 20
+            exit-player-queued: 48
+            mode: adaptive
+            enter-low-queue: 96
+            min-pressure-ticks: 10
+            min-recovery-ticks: 80
+            enter-player-queued: 96
+            startup-seconds: 20
+            startup-seconds-info: Startup pressure window in seconds before adaptive queue thresholds take over.
+            exit-low-queue: 48
+            vehicle-update-frequency: 4
+            enabled-info: When enabled, player interaction responsiveness is prioritized over entity tracking smoothness during startup and packet backpressure.
     startup-readiness:
         enabled: true
         info: If enabled, startup blocks on chunk warmup so Done means players can join smoothly.
@@ -138,6 +157,32 @@ settings:
     save-playerdata-by-uuid: true
     remove-join-leave-debug: true
     enable-tpc-nodelay: true
+    enable-tcp-nodelay: true
+    profiler:
+        top-offenders:
+            count: 10
+            count-info: How many top per-player offenders to include in reports.
+        deep:
+            packet-breakdown:
+                enabled: true
+            per-player:
+                enabled: true
+        auto-snapshot:
+            cooldown-seconds-info: Minimum seconds between auto snapshots.
+            cooldown-seconds: 30
+            tick-threshold-ms-info: Tick-time threshold in milliseconds that triggers auto snapshots.
+            enabled: true
+            info: Automatically capture snapshots when tick time exceeds threshold.
+            tick-threshold-ms: 75
+        ring-buffer:
+            seconds: 300
+            info: How many seconds of rolling telemetry to retain for snapshots and reports.
+        report:
+            include-json: true
+            include-text: true
+        always-on:
+            enabled: true
+            info: Collect low-overhead telemetry continuously so intermittent lag spikes are captured.
 world:
     settings:
         speed-hack-check:
@@ -208,4 +253,4 @@ command:
         info: Enables the /tps command to show the server's TPS for various intervals.
         enabled: true
     info: This section allows you to enable or disable optional Poseidon commands. This is useful if you have a plugin that conflicts with a Poseidon command.
-config-version: 5
+config-version: 6

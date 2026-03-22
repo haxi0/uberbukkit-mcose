@@ -16,7 +16,7 @@ public class Packet201PlayerInfo extends Packet {
     public Packet201PlayerInfo() {}
 
     public Packet201PlayerInfo(String playerName, boolean connected, int ping) {
-        this.playerName = playerName;
+        this.playerName = sanitizePlayerName(playerName);
         this.connected = connected;
         this.ping = ping;
     }
@@ -40,6 +40,17 @@ public class Packet201PlayerInfo extends Packet {
     public int a() {
         return 5 + (this.playerName == null ? 0 : this.playerName.length() * 2);
     }
-}
 
+    private static String sanitizePlayerName(String playerName) {
+        if (playerName == null) {
+            return "";
+        }
+
+        if (playerName.length() > 16) {
+            return playerName.substring(0, 16);
+        }
+
+        return playerName;
+    }
+}
 

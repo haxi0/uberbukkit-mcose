@@ -30,6 +30,11 @@ public class NetworkListenThread {
         this.d.bind(new InetSocketAddress(inetaddress, i), 0);
         this.b = true;
         this.e = new NetworkAcceptThread(this, "Listen thread", minecraftserver);
+        this.e.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            public void uncaughtException(Thread thread, Throwable throwable) {
+                a.log(Level.SEVERE, "Network accept thread crashed unexpectedly", throwable);
+            }
+        });
         this.e.start();
     }
 
@@ -95,6 +100,27 @@ public class NetworkListenThread {
 
     public int getActiveHandlerCount() {
         return this.h.size();
+    }
+
+    public String getBoundAddressForLog() {
+        if (this.d == null) {
+            return "<unbound>";
+        }
+
+        InetAddress address = this.d.getInetAddress();
+        if (address == null || address.isAnyLocalAddress()) {
+            return "*";
+        }
+
+        return address.getHostAddress();
+    }
+
+    public int getBoundPort() {
+        return this.d == null ? -1 : this.d.getLocalPort();
+    }
+
+    public boolean isAcceptThreadAlive() {
+        return this.e != null && this.e.isAlive();
     }
 
     static ServerSocket a(NetworkListenThread networklistenthread) {

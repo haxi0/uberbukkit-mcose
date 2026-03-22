@@ -372,3 +372,26 @@
 2026-01-26 17:34:48 [INFO] Done (0.023s)! For help, type "help" or "?"
 2026-01-26 17:34:53 [INFO] CONSOLE: Starting Server Shutdown, Saving Data.[0m
 
+2026-03-22 20:08:57 [INFO] Starting Minecraft Oldschool Edition server version Beta 1.7.6
+2026-03-22 20:08:57 [INFO] Loading properties
+2026-03-22 20:08:57 [INFO] Voice chat broadcasting enabled (UDP port: 24454)
+2026-03-22 20:08:57 [INFO] Voice TCP fallback limiter configured (packets/sec=120, bytes/sec=131072, burst-seconds=2)
+2026-03-22 20:08:57 [INFO] Default game mode: HARDCORE - Death is permanent!
+2026-03-22 20:08:57 [INFO] Starting Minecraft server on *:25565
+2026-03-22 20:08:57 [WARNING] **** FAILED TO BIND TO PORT!
+2026-03-22 20:08:57 [WARNING] The exception was: java.net.SocketException: Operation not permitted
+2026-03-22 20:08:57 [WARNING] Perhaps a server is already running on that port?
+2026-03-22 20:08:57 [SEVERE] [StartupFailure] reason=Network bind failed | cwd=/mnt/kingston/Developer/uberbukkit-mcose/. | java=21.0.10 (Artix Linux) | os=Linux amd64 | guiMode=false | tick=0 | server-ip= | server-port=25565 | online-mode=false | level-name=world | level-type=DEFAULT | allow-nether=true | voice-chat=true | voice-port=24454 | voice-require-udp-bind=false
+2026-03-22 20:08:57 [SEVERE] [StartupFailure] reason=Initialization returned false | cwd=/mnt/kingston/Developer/uberbukkit-mcose/. | java=21.0.10 (Artix Linux) | os=Linux amd64 | guiMode=false | tick=0 | server-ip= | server-port=25565 | online-mode=false | level-name=world | level-type=DEFAULT | allow-nether=true | voice-chat=true | voice-port=24454 | voice-require-udp-bind=false
+2026-03-22 20:08:57 [INFO] Stopping server
+2026-03-22 20:08:57 [INFO] [ServerStats] Loaded server statistics: 0 stats, 0 unique players, 0 achievement types tracked.
+2026-03-22 20:08:57 [INFO] [ServerStats] Server statistics saved on shutdown.
+2026-03-22 20:08:57 [WARNING] [MCOSE] Poseidon shutdown error (non-fatal): Cannot invoke "com.legacyminecraft.poseidon.PoseidonServer.shutdownServer()" because the return value of "com.legacyminecraft.poseidon.Poseidon.getServer()" is null
+2026-03-22 20:08:57 [INFO] [Threading] Loaded configuration:
+2026-03-22 20:08:57 [INFO] [Threading]   Async Chunk Generation: true (2 threads)
+2026-03-22 20:08:57 [INFO] [Threading]   Async Lighting: false (2 threads)
+2026-03-22 20:08:57 [INFO] [Threading]   Async Entity Processing: false (2 threads)
+2026-03-22 20:08:57 [INFO] [Threading]   Chunk Compression: 2 worker(s), queue capacity 10240, high-watermark 85%, low-watermark 50%
+2026-03-22 20:08:57 [INFO] [Threading] Shutting down async systems...
+2026-03-22 20:08:57 [INFO] [Threading] Async systems shutdown complete
+2026-03-22 20:08:57 [INFO] Region file cache flushed successfully

@@ -252,21 +252,87 @@ public class ServerConfigurationManager {
         }
     }
 
+    private void loadJoinChunks(WorldServer world, EntityPlayer player, int radiusChunks) {
+        if (world == null || player == null) {
+            return;
+        }
+
+        int chunkX = MathHelper.floor(player.locX) >> 4;
+        int chunkZ = MathHelper.floor(player.locZ) >> 4;
+        int radius = Math.max(0, radiusChunks);
+
+        for (int dx = -radius; dx <= radius; ++dx) {
+            for (int dz = -radius; dz <= radius; ++dz) {
+                world.chunkProviderServer.getChunkAt(chunkX + dx, chunkZ + dz);
+            }
+        }
+    }
+
+    private boolean hasSolidSupportWithin(WorldServer world, EntityPlayer player, int maxDepth) {
+        if (world == null || player == null || maxDepth <= 0) {
+            return false;
+        }
+
+        int x = MathHelper.floor(player.locX);
+        int z = MathHelper.floor(player.locZ);
+        int y = MathHelper.floor(player.locY) - 1;
+        int minY = Math.max(1, y - maxDepth);
+
+        for (int yy = y; yy >= minY; --yy) {
+            int blockId = world.getTypeId(x, yy, z);
+            if (blockId <= 0 || blockId >= Block.byId.length) {
+                continue;
+            }
+
+            Block block = Block.byId[blockId];
+            if (block != null && block.material != null && block.material.isSolid() && !block.material.isLiquid()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void movePlayerToNearestSafeSurface(WorldServer world, EntityPlayer player, int radius) {
+        if (world == null || player == null) {
+            return;
+        }
+
+        int x = MathHelper.floor(player.locX);
+        int z = MathHelper.floor(player.locZ);
+        ChunkCoordinates safe = null;
+
+        if (this.isSkyTerrainWorld(world)) {
+            safe = this.findNearestSafeSkyRespawn(world, x, z);
+            if (safe == null) {
+                safe = world.findSafeSpawnNear(x, z, radius, false);
+            }
+        } else {
+            safe = world.findSafeSpawnNear(x, z, radius, this.shouldPreferShorelineSpawn(world));
+        }
+
+        if (safe != null) {
+            player.setPosition((double) safe.x + 0.5D, (double) safe.y + 0.01D, (double) safe.z + 0.5D);
+            this.loadJoinChunks(world, player, 1);
+            this.nudgePlayerUpUntilClear(world, player, 12);
+        }
+    }
+
     private void enforceSafeSpawnPosition(WorldServer world, EntityPlayer player) {
         if (world == null || player == null) {
             return;
         }
 
+        this.loadJoinChunks(world, player, 1);
         this.nudgePlayerUpUntilClear(world, player, 24);
 
         if (this.isPlayerInsideSolidBlock(world, player)) {
-            int x = MathHelper.floor(player.locX);
-            int z = MathHelper.floor(player.locZ);
-            ChunkCoordinates safe = world.findSafeSpawnNear(x, z, 24, this.shouldPreferShorelineSpawn(world));
-            if (safe != null) {
-                player.setPosition((double) safe.x + 0.5D, (double) safe.y + 0.01D, (double) safe.z + 0.5D);
-            }
-            this.nudgePlayerUpUntilClear(world, player, 12);
+            this.movePlayerToNearestSafeSurface(world, player, 24);
+        }
+
+        boolean unsupported = !this.isStandingOnSolidGround(world, player) && !this.hasSolidSupportWithin(world, player, 32);
+        if (player.locY < 1.0D || unsupported) {
+            this.movePlayerToNearestSafeSurface(world, player, 48);
         }
 
         player.motX = 0.0D;
@@ -324,6 +390,7 @@ public class ServerConfigurationManager {
 
         // Plugins can alter position during join events; re-validate before inserting into world.
         this.enforceSafeSpawnPosition(worldserver, entityplayer);
+        this.loadJoinChunks(worldserver, entityplayer, 1);
         worldserver.addEntity(entityplayer);
         this.getPlayerManager(entityplayer.dimension).addPlayer(entityplayer);
         this.sendOperatorStatus(entityplayer);
@@ -375,9 +442,14 @@ public class ServerConfigurationManager {
         //Project POSEIDON End
 
         this.playerFileData.a(entityplayer);
-        this.server.getWorldServer(entityplayer.dimension).kill(entityplayer);
+
+        WorldServer worldserver = this.server.getWorldServer(entityplayer.dimension);
+        this.server.getTracker(entityplayer.dimension).untrackPlayer(entityplayer);
         this.players.remove(entityplayer);
         this.getPlayerManager(entityplayer.dimension).removePlayer(entityplayer);
+        if (worldserver != null) {
+            worldserver.removeEntity(entityplayer);
+        }
 
         // Notify friends verification handler of player leave
         if (this.server.friendsVerificationHandler != null) {
